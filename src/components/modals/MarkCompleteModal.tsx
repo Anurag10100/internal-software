@@ -1,5 +1,5 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { X, Upload, Image as ImageIcon } from 'lucide-react';
+import { useState, useRef, useCallback } from 'react';
+import { X, Image as ImageIcon } from 'lucide-react';
 
 interface MarkCompleteModalProps {
   taskTitle: string;
@@ -7,7 +7,7 @@ interface MarkCompleteModalProps {
   onComplete: (imageUrl: string | null) => void;
 }
 
-export default function MarkCompleteModal({ taskTitle, onClose, onComplete }: MarkCompleteModalProps) {
+export default function MarkCompleteModal({ onClose, onComplete }: MarkCompleteModalProps) {
   const [image, setImage] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);

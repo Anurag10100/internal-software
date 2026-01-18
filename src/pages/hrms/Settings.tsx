@@ -1,8 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   Settings as SettingsIcon,
-  Clock,
-  MapPin,
   Plus,
   Eye,
   EyeOff,
@@ -17,8 +15,7 @@ import {
 import { useApp } from '../../context/AppContext';
 
 export default function Settings() {
-  const { hrmsSettings, setHrmsSettings, users } = useApp();
-  const [activeTab, setActiveTab] = useState('time');
+  const { hrmsSettings, setHrmsSettings } = useApp();
 
   // Time Settings State
   const [lateTime, setLateTime] = useState(hrmsSettings.timeSettings.lateTime);
@@ -28,10 +25,6 @@ export default function Settings() {
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [editingLocation, setEditingLocation] = useState<{ id: string; name: string } | null>(null);
   const [newLocationName, setNewLocationName] = useState('');
-
-  // Leave Type Modal State
-  const [showLeaveTypeModal, setShowLeaveTypeModal] = useState(false);
-  const [editingLeaveType, setEditingLeaveType] = useState<any>(null);
 
   // Holiday Modal State
   const [showHolidayModal, setShowHolidayModal] = useState(false);
@@ -128,16 +121,6 @@ export default function Settings() {
       ...prev,
       holidays: prev.holidays.filter(h => h.id !== id),
     }));
-  };
-
-  const handleAddHOD = (userId: string) => {
-    const user = users.find(u => u.id === userId);
-    if (user && !hrmsSettings.hodUsers.find(h => h.id === userId)) {
-      setHrmsSettings(prev => ({
-        ...prev,
-        hodUsers: [...prev.hodUsers, user],
-      }));
-    }
   };
 
   const handleRemoveHOD = (userId: string) => {

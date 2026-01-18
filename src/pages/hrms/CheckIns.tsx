@@ -1,9 +1,7 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Calendar, Clock, MapPin, Image } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
 
 export default function CheckIns() {
-  const { currentUser } = useApp();
   const [dateFilter, setDateFilter] = useState('today');
 
   // Mock check-in data

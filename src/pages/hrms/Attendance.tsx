@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Download, Search } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -12,7 +12,7 @@ interface EmployeeAttendance {
 }
 
 export default function Attendance() {
-  const { users, hrmsSettings } = useApp();
+  const { hrmsSettings } = useApp();
   const [selectedMonth, setSelectedMonth] = useState('January');
   const [selectedYear, setSelectedYear] = useState(2026);
   const [searchQuery, setSearchQuery] = useState('');

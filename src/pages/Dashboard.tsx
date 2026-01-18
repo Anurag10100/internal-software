@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Calendar, CheckCircle, Clock, Users, TrendingUp, AlertCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import DailyCheckInModal from '../components/modals/DailyCheckInModal';

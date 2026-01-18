@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Plus, Clock, Calendar, Tag, Eye, Trash2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import CreateTaskModal from '../../components/modals/CreateTaskModal';

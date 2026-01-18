@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Plus, Calendar, Clock, User, FileText, RefreshCw, PartyPopper } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import RequestLeaveModal from '../../components/modals/RequestLeaveModal';
@@ -54,7 +54,7 @@ function CircularProgress({ value, max, color, size = 120 }: CircularProgressPro
 }
 
 export default function MyLeaves() {
-  const { leaveRequests, currentUser, hrmsSettings } = useApp();
+  const { leaveRequests, currentUser } = useApp();
   const [showRequestModal, setShowRequestModal] = useState(false);
 
   const myLeaves = leaveRequests.filter(lr => lr.userId === currentUser.id);

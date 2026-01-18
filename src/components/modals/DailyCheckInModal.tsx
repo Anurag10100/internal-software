@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { X, Camera, Check, MapPin, RefreshCw, Star } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import RequestLeaveModal from './RequestLeaveModal';
@@ -14,7 +14,7 @@ export default function DailyCheckInModal({ onClose }: DailyCheckInModalProps) {
 
   const [isCaptured, setIsCaptured] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [isStreaming, setIsStreaming] = useState(false);
+  const [, setIsStreaming] = useState(false);
   const [location, setLocation] = useState('In Office (Gurugram)');
   const [locationAddress, setLocationAddress] = useState('Brahma City, Sector 62, Gurgaon, Gurugram, Haryana, 122008, India');
   const [priorities, setPriorities] = useState(['', '', '']);
@@ -86,7 +86,7 @@ export default function DailyCheckInModal({ onClose }: DailyCheckInModalProps) {
     }, 1000);
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     startCamera();
     return () => stopCamera();
   }, [startCamera, stopCamera]);
