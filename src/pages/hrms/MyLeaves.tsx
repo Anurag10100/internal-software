@@ -1,18 +1,89 @@
 import React, { useState } from 'react';
-import { Plus, Calendar, Clock, User, FileText } from 'lucide-react';
+import { Plus, Calendar, Clock, User, FileText, RefreshCw, PartyPopper } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import RequestLeaveModal from '../../components/modals/RequestLeaveModal';
+
+interface CircularProgressProps {
+  value: number;
+  max: number | 'unlimited';
+  color: string;
+  size?: number;
+}
+
+function CircularProgress({ value, max, color, size = 120 }: CircularProgressProps) {
+  const strokeWidth = 8;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const isUnlimited = max === 'unlimited';
+  const percentage = isUnlimited ? 100 : (max > 0 ? ((max - value) / max) * 100 : 0);
+  const offset = circumference - (percentage / 100) * circumference;
+
+  return (
+    <div className="relative" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="transform -rotate-90">
+        {/* Background circle */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="#f3f4f6"
+          strokeWidth={strokeWidth}
+        />
+        {/* Progress circle */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          className="transition-all duration-500"
+        />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-3xl font-bold text-gray-800">
+          {isUnlimited ? '∞' : (max - value)}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export default function MyLeaves() {
   const { leaveRequests, currentUser, hrmsSettings } = useApp();
   const [showRequestModal, setShowRequestModal] = useState(false);
-  const [filter, setFilter] = useState('all');
 
   const myLeaves = leaveRequests.filter(lr => lr.userId === currentUser.id);
 
-  const filteredLeaves = filter === 'all'
-    ? myLeaves
-    : myLeaves.filter(lr => lr.status === filter);
+  // Leave balance data with colors
+  const leaveBalance = [
+    { id: '1', name: 'Casual Leave', total: 7, used: 0, color: '#22c55e' },
+    { id: '2', name: 'Earned Leaves', total: 12, used: 0, color: '#ef4444' },
+    { id: '3', name: 'Sick Leave', total: 7, used: 0, color: '#f97316' },
+    { id: '4', name: 'Unpaid Leave', total: 'unlimited' as const, used: 0, color: '#22c55e' },
+    { id: '5', name: 'Work from Home', total: 'unlimited' as const, used: 0, color: '#ef4444' },
+  ];
+
+  // Today on Leave mock data
+  const todayOnLeave = [
+    { id: '1', name: 'Neeti Choudhary', date: '07 Jan 2026', type: 'Full Day' },
+    { id: '2', name: 'Animesh', date: '07 Jan 2026', type: 'Full Day' },
+  ];
+
+  // Holiday list
+  const holidayList = [
+    { name: 'New Year', date: '01 Jan' },
+    { name: 'Republic Day', date: '26 Jan' },
+    { name: 'Holi', date: '04 Mar' },
+    { name: 'Independence Day', date: '15 Aug' },
+    { name: 'Dussehra', date: '20 Oct' },
+    { name: 'Diwali', date: '08 Nov' },
+    { name: 'Christmas', date: '25 Dec' },
+  ];
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -26,11 +97,6 @@ export default function MyLeaves() {
     }
   };
 
-  const leaveBalance = hrmsSettings.leaveTypes.filter(lt => lt.isActive).map(lt => ({
-    ...lt,
-    used: myLeaves.filter(ml => ml.leaveType.id === lt.id && ml.status === 'approved').length,
-  }));
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -38,68 +104,110 @@ export default function MyLeaves() {
         <h1 className="text-2xl font-bold text-gray-900">My Leaves</h1>
         <button
           onClick={() => setShowRequestModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-danger-500 text-white rounded-lg text-sm font-medium hover:bg-danger-600 transition-colors"
         >
           <Plus className="w-4 h-4" />
-          Request Leave
+          Apply Leave
         </button>
       </div>
 
-      {/* Leave Balance Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {leaveBalance.map((leave) => (
-          <div key={leave.id} className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-            <h3 className="text-sm font-medium text-gray-600 truncate">{leave.name}</h3>
-            <div className="mt-2 flex items-end justify-between">
-              <span className="text-2xl font-bold text-gray-900">
-                {leave.used}
-              </span>
-              <span className="text-sm text-gray-500">
-                / {leave.daysPerYear === 'unlimited' ? '∞' : leave.daysPerYear}
-              </span>
-            </div>
-            {leave.requiresDocument && (
-              <span className="inline-block mt-2 px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded">
-                D
-              </span>
-            )}
+      <div className="grid lg:grid-cols-3 gap-6">
+        {/* Leave Balance Cards */}
+        <div className="lg:col-span-2">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {leaveBalance.map((leave) => (
+              <div key={leave.id} className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 flex flex-col items-center">
+                <CircularProgress
+                  value={leave.used}
+                  max={leave.total}
+                  color={leave.color}
+                />
+                <div className="mt-4 text-center">
+                  <p className="text-sm text-gray-500">
+                    Total: {leave.total === 'unlimited' ? 'Unlimited' : leave.total} Used: {leave.used}
+                  </p>
+                  <p className="font-medium text-gray-900 mt-1">{leave.name}</p>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
+
+        {/* Right Sidebar */}
+        <div className="space-y-4">
+          {/* Today on Leave */}
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+            <div className="flex items-center gap-2 mb-4">
+              <Calendar className="w-5 h-5 text-primary-500" />
+              <h3 className="font-semibold text-gray-900">Today on Leave</h3>
+            </div>
+            <div className="space-y-3">
+              {todayOnLeave.map((person) => (
+                <div key={person.id} className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
+                    <span className="text-xs font-medium text-primary-700">
+                      {person.name.charAt(0)}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{person.name}</p>
+                    <p className="text-xs text-gray-500">{person.date} | {person.type}</p>
+                  </div>
+                </div>
+              ))}
+              {todayOnLeave.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-2">No one on leave today</p>
+              )}
+            </div>
+          </div>
+
+          {/* Holiday List */}
+          <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+            <div className="flex items-center gap-2 mb-4">
+              <PartyPopper className="w-5 h-5 text-yellow-500" />
+              <h3 className="font-semibold text-gray-900">Holiday list</h3>
+            </div>
+            <div className="space-y-2">
+              {holidayList.map((holiday, index) => (
+                <div key={index} className="flex items-center justify-between py-1">
+                  <span className="text-sm text-gray-700">{holiday.name}</span>
+                  <span className="text-sm text-gray-500">{holiday.date}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex gap-2">
-        {['all', 'pending', 'approved', 'rejected'].map((status) => (
-          <button
-            key={status}
-            onClick={() => setFilter(status)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              filter === status
-                ? 'bg-primary-500 text-white'
-                : 'bg-white text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            {status.charAt(0).toUpperCase() + status.slice(1)}
-          </button>
-        ))}
-      </div>
-
-      {/* Leave Requests List */}
+      {/* Leaves Stats Section */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-        {filteredLeaves.length === 0 ? (
-          <div className="p-8 text-center">
-            <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">No leave requests found</p>
+        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="w-5 h-5 text-gray-400" />
+            <h2 className="text-lg font-semibold text-gray-900">Leaves Stats</h2>
+          </div>
+          <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <RefreshCw className="w-4 h-4 text-gray-400" />
+          </button>
+        </div>
+
+        {myLeaves.length === 0 ? (
+          <div className="p-12 text-center">
+            <div className="w-16 h-16 bg-gray-100 rounded-lg mx-auto mb-4 flex items-center justify-center">
+              <Calendar className="w-8 h-8 text-gray-300" />
+            </div>
+            <p className="text-gray-900 font-medium">No leave records found</p>
+            <p className="text-sm text-gray-500 mt-1">You haven't applied for any leaves yet.</p>
             <button
               onClick={() => setShowRequestModal(true)}
               className="mt-4 text-primary-500 text-sm font-medium hover:text-primary-600"
             >
-              Request your first leave
+              Apply for your first leave
             </button>
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {filteredLeaves.map((leave) => (
+            {myLeaves.map((leave) => (
               <div key={leave.id} className="p-4 hover:bg-gray-50 transition-colors">
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-4">

@@ -43,6 +43,7 @@ const navigation: NavItem[] = [
       { name: 'My Leaves', href: '/hrms/my-leaves' },
       { name: 'All Leaves', href: '/hrms/all-leaves' },
       { name: 'Check-ins', href: '/hrms/check-ins' },
+      { name: 'Team Check-in', href: '/hrms/team-check-ins' },
       { name: 'Attendance', href: '/hrms/attendance' },
       { name: 'Settings', href: '/hrms/settings' },
     ],

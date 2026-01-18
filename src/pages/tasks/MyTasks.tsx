@@ -2,10 +2,13 @@ import React, { useState } from 'react';
 import { Plus, Check, Clock, Calendar, Tag, Info } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import CreateTaskModal from '../../components/modals/CreateTaskModal';
+import MarkCompleteModal from '../../components/modals/MarkCompleteModal';
 
 export default function MyTasks() {
   const { tasks, setTasks, currentUser } = useApp();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState('Current Week');
 
   const myTasks = tasks.filter(t => t.assignedTo === currentUser.id);
@@ -30,10 +33,19 @@ export default function MyTasks() {
       : 0,
   };
 
-  const handleMarkComplete = (taskId: string) => {
-    setTasks(prev =>
-      prev.map(t => t.id === taskId ? { ...t, status: 'completed' } : t)
-    );
+  const handleMarkCompleteClick = (taskId: string) => {
+    setSelectedTaskId(taskId);
+    setShowCompleteModal(true);
+  };
+
+  const handleMarkComplete = (imageUrl: string | null) => {
+    if (selectedTaskId) {
+      setTasks(prev =>
+        prev.map(t => t.id === selectedTaskId ? { ...t, status: 'completed' } : t)
+      );
+    }
+    setShowCompleteModal(false);
+    setSelectedTaskId(null);
   };
 
   // Mock leaderboard data
@@ -148,7 +160,7 @@ export default function MyTasks() {
                     </div>
                   </div>
                   <button
-                    onClick={() => handleMarkComplete(task.id)}
+                    onClick={() => handleMarkCompleteClick(task.id)}
                     className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-primary-600 border border-primary-200 rounded-lg hover:bg-primary-50 transition-colors"
                   >
                     <Check className="w-4 h-4" />
@@ -282,6 +294,17 @@ export default function MyTasks() {
 
       {showCreateModal && (
         <CreateTaskModal onClose={() => setShowCreateModal(false)} />
+      )}
+
+      {showCompleteModal && selectedTaskId && (
+        <MarkCompleteModal
+          taskTitle={myTasks.find(t => t.id === selectedTaskId)?.title || ''}
+          onClose={() => {
+            setShowCompleteModal(false);
+            setSelectedTaskId(null);
+          }}
+          onComplete={handleMarkComplete}
+        />
       )}
     </div>
   );

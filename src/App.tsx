@@ -11,6 +11,7 @@ import TeamTasks from './pages/tasks/TeamTasks';
 import MyLeaves from './pages/hrms/MyLeaves';
 import AllLeaves from './pages/hrms/AllLeaves';
 import CheckIns from './pages/hrms/CheckIns';
+import TeamCheckIns from './pages/hrms/TeamCheckIns';
 import Attendance from './pages/hrms/Attendance';
 import Settings from './pages/hrms/Settings';
 
@@ -32,6 +33,7 @@ function App() {
           <Route path="/hrms/my-leaves" element={<MyLeaves />} />
           <Route path="/hrms/all-leaves" element={<AllLeaves />} />
           <Route path="/hrms/check-ins" element={<CheckIns />} />
+          <Route path="/hrms/team-check-ins" element={<TeamCheckIns />} />
           <Route path="/hrms/attendance" element={<Attendance />} />
           <Route path="/hrms/settings" element={<Settings />} />
 
