@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, LogIn, AlertCircle } from 'lucide-react';
+import { Eye, EyeOff, LogIn, AlertCircle, Shield, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
@@ -29,24 +29,35 @@ export default function Login() {
     setIsLoading(false);
   };
 
+  const fillCredentials = (type: 'admin' | 'user') => {
+    if (type === 'admin') {
+      setEmail('admin@wowevents.com');
+      setPassword('admin123');
+    } else {
+      setEmail('amit@wowevents.com');
+      setPassword('user123');
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 via-white to-primary-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo & Header */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-primary-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <span className="text-white font-bold text-2xl">W</span>
+          <div className="w-20 h-20 bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl shadow-primary-200">
+            <span className="text-white font-bold text-3xl">W</span>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">WOW Events</h1>
-          <p className="text-gray-500 mt-1">Company Portal</p>
+          <p className="text-gray-500 mt-1">Employee Management Portal</p>
         </div>
 
         {/* Login Card */}
-        <div className="bg-white rounded-2xl shadow-xl p-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">Sign in to your account</h2>
+        <div className="bg-white rounded-2xl shadow-xl shadow-gray-200/50 p-8 border border-gray-100">
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Welcome back</h2>
+          <p className="text-gray-500 text-sm mb-6">Sign in to access your account</p>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700 text-sm">
+            <div className="mb-4 p-3 bg-red-50 border border-red-100 rounded-xl flex items-center gap-2 text-red-700 text-sm">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               {error}
             </div>
@@ -54,7 +65,7 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
                 Email Address
               </label>
               <input
@@ -64,12 +75,12 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 placeholder="you@wowevents.com"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">
                 Password
               </label>
               <div className="relative">
@@ -80,12 +91,12 @@ export default function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   placeholder="Enter your password"
-                  className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                  className="w-full px-4 py-3 pr-12 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all bg-gray-50 focus:bg-white"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
@@ -108,7 +119,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-primary-500 text-white rounded-lg font-medium hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl font-medium hover:from-primary-600 hover:to-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary-200"
             >
               {isLoading ? (
                 <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -123,25 +134,39 @@ export default function Login() {
         </div>
 
         {/* Demo Credentials */}
-        <div className="mt-6 bg-white/80 backdrop-blur rounded-xl p-4">
-          <p className="text-sm font-medium text-gray-700 mb-3">Demo Credentials:</p>
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center justify-between p-2 bg-purple-50 rounded-lg">
-              <div>
-                <span className="font-medium text-purple-700">Admin:</span>
-                <span className="text-gray-600 ml-2">admin@wowevents.com</span>
+        <div className="mt-6 bg-white rounded-2xl p-5 shadow-lg shadow-gray-100 border border-gray-100">
+          <p className="text-sm font-medium text-gray-700 mb-4">Quick Login (Demo)</p>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => fillCredentials('admin')}
+              className="flex items-center gap-2 p-3 bg-purple-50 hover:bg-purple-100 rounded-xl transition-colors border border-purple-100"
+            >
+              <div className="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center">
+                <Shield className="w-4 h-4 text-white" />
               </div>
-              <span className="text-gray-500">admin123</span>
-            </div>
-            <div className="flex items-center justify-between p-2 bg-blue-50 rounded-lg">
-              <div>
-                <span className="font-medium text-blue-700">User:</span>
-                <span className="text-gray-600 ml-2">amit@wowevents.com</span>
+              <div className="text-left">
+                <p className="text-sm font-medium text-purple-700">Admin</p>
+                <p className="text-xs text-purple-500">Full access</p>
               </div>
-              <span className="text-gray-500">user123</span>
-            </div>
+            </button>
+            <button
+              onClick={() => fillCredentials('user')}
+              className="flex items-center gap-2 p-3 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors border border-blue-100"
+            >
+              <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                <User className="w-4 h-4 text-white" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-medium text-blue-700">Employee</p>
+                <p className="text-xs text-blue-500">Limited access</p>
+              </div>
+            </button>
           </div>
         </div>
+
+        <p className="text-center text-xs text-gray-400 mt-6">
+          2026 WOW Events. All rights reserved.
+        </p>
       </div>
     </div>
   );
