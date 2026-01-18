@@ -4,11 +4,11 @@ import { useApp } from '../../context/AppContext';
 import CreateTaskModal from '../../components/modals/CreateTaskModal';
 
 export default function DelegatedTasks() {
-  const { tasks, currentUser, users } = useApp();
+  const { users, getDelegatedTasks } = useApp();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [filter, setFilter] = useState('all');
 
-  const delegatedTasks = tasks.filter(t => t.assignedBy === currentUser.name && t.assignedTo !== currentUser.id);
+  const delegatedTasks = getDelegatedTasks();
 
   const filteredTasks = filter === 'all'
     ? delegatedTasks

@@ -4,20 +4,22 @@ import { useApp } from '../context/AppContext';
 import DailyCheckInModal from '../components/modals/DailyCheckInModal';
 
 export default function Dashboard() {
-  const { tasks, leaveRequests, currentUser } = useApp();
+  const { currentUser, getMyTasks, getMyLeaveRequests } = useApp();
   const [showCheckInModal, setShowCheckInModal] = useState(false);
 
-  const myTasks = tasks.filter(t => t.assignedTo === currentUser.id);
+  const myTasks = getMyTasks();
   const pendingTasks = myTasks.filter(t => t.status !== 'completed');
   const completedTasks = myTasks.filter(t => t.status === 'completed');
 
-  const pendingLeaves = leaveRequests.filter(lr => lr.status === 'pending');
+  const pendingLeaves = getMyLeaveRequests().filter(lr => lr.status === 'pending');
+
+  const userName = currentUser?.name?.split(' ')[0] || 'User';
 
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
       <div className="bg-gradient-to-r from-primary-500 to-primary-600 rounded-2xl p-6 text-white">
-        <h1 className="text-2xl font-bold">Welcome back, {currentUser.name.split(' ')[0]}!</h1>
+        <h1 className="text-2xl font-bold">Welcome back, {userName}!</h1>
         <p className="mt-1 text-primary-100">Here's what's happening today</p>
         <div className="mt-4 flex gap-3">
           <button

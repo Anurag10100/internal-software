@@ -35,6 +35,7 @@ export interface Task {
   id: string;
   title: string;
   assignedBy: string;
+  assignedByUserId?: string;
   assignedByAvatar?: string;
   assignedTo: string;
   dueDate: string;
@@ -52,10 +53,10 @@ export interface CheckIn {
   checkInTime: string;
   checkOutTime?: string;
   location: string;
-  locationAddress: string;
+  locationAddress?: string;
   photoUrl?: string;
   priorities: string[];
-  status: 'on_time' | 'late' | 'half_day' | 'absent';
+  status?: 'on_time' | 'late' | 'half_day' | 'absent';
 }
 
 export interface LocationOption {

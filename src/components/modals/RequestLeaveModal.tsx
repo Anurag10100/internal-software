@@ -19,6 +19,8 @@ export default function RequestLeaveModal({ onClose }: RequestLeaveModalProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!currentUser) return;
+
     const selectedLeaveType = hrmsSettings.leaveTypes.find(lt => lt.id === leaveTypeId);
     const selectedHod = hrmsSettings.hodUsers.find(h => h.id === hodId);
 

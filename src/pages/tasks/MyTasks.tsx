@@ -5,13 +5,13 @@ import CreateTaskModal from '../../components/modals/CreateTaskModal';
 import MarkCompleteModal from '../../components/modals/MarkCompleteModal';
 
 export default function MyTasks() {
-  const { tasks, setTasks, currentUser } = useApp();
+  const { setTasks, getMyTasks } = useApp();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState('Current Week');
 
-  const myTasks = tasks.filter(t => t.assignedTo === currentUser.id);
+  const myTasks = getMyTasks();
 
   const stats = {
     totalTasks: myTasks.length,

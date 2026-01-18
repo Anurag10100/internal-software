@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode } from 'react';
 import { User, LeaveRequest, Task, HRMSSettings, CheckIn } from '../types';
+import { useAuth } from './AuthContext';
 
 interface AppContextType {
-  currentUser: User;
+  currentUser: User | null;
   users: User[];
   leaveRequests: LeaveRequest[];
   tasks: Task[];
@@ -12,23 +13,20 @@ interface AppContextType {
   setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
   setCheckIns: React.Dispatch<React.SetStateAction<CheckIn[]>>;
   setHrmsSettings: React.Dispatch<React.SetStateAction<HRMSSettings>>;
+  // Helper methods for filtered data
+  getMyTasks: () => Task[];
+  getDelegatedTasks: () => Task[];
+  getMyLeaveRequests: () => LeaveRequest[];
+  getMyCheckIns: () => CheckIn[];
 }
 
-const defaultUser: User = {
-  id: '1',
-  name: 'Sachin Talwar',
-  email: 'sachin@wowevents.in',
-  avatar: '/avatars/sachin.jpg',
-  department: 'Management',
-  role: 'admin',
-};
-
 const defaultUsers: User[] = [
-  defaultUser,
-  { id: '2', name: 'Tarun Fuloria', email: 'mis@wowevents.in', department: 'MIS', role: 'manager' },
-  { id: '3', name: 'Amit Talwar', email: 'amit@wowevents.in', department: 'Operations', role: 'manager' },
-  { id: '4', name: 'Priya Sharma', email: 'priya@wowevents.in', department: 'HR', role: 'employee' },
-  { id: '5', name: 'Rahul Kumar', email: 'rahul@wowevents.in', department: 'Design', role: 'employee' },
+  { id: 'admin-1', name: 'Sachin Talwar', email: 'admin@wowevents.com', department: 'Management', role: 'admin' },
+  { id: 'admin-2', name: 'Priya Sharma', email: 'hr@wowevents.com', department: 'HR', role: 'admin' },
+  { id: 'user-1', name: 'Amit Talwar', email: 'amit@wowevents.com', department: 'Tech', role: 'employee' },
+  { id: 'user-2', name: 'Neeti Choudhary', email: 'neeti@wowevents.com', department: 'Concept & Copy', role: 'employee' },
+  { id: 'user-3', name: 'Animesh', email: 'animesh@wowevents.com', department: '2D', role: 'employee' },
+  { id: 'user-4', name: 'Rahul Kumar', email: 'rahul@wowevents.com', department: '3D', role: 'employee' },
 ];
 
 const defaultHRMSSettings: HRMSSettings = {
@@ -62,9 +60,8 @@ const defaultHRMSSettings: HRMSSettings = {
   },
   workingDayOverrides: [],
   hodUsers: [
-    { id: '1', name: 'Sachin Talwar', email: 'sachin@wowevents.in', role: 'admin' },
-    { id: '2', name: 'Tarun Fuloria', email: 'mis@wowevents.in', role: 'manager' },
-    { id: '3', name: 'Amit Talwar', email: 'amit@wowevents.in', role: 'manager' },
+    { id: 'admin-1', name: 'Sachin Talwar', email: 'admin@wowevents.com', role: 'admin' },
+    { id: 'admin-2', name: 'Priya Sharma', email: 'hr@wowevents.com', role: 'admin' },
   ],
   hrEmailRecipients: [],
   holidays: [
@@ -81,87 +78,262 @@ const defaultHRMSSettings: HRMSSettings = {
   },
 };
 
+// Mock tasks for different users
 const defaultTasks: Task[] = [
+  // Tasks assigned to Amit (user-1)
   {
     id: '1',
-    title: 'Test 2',
+    title: 'Complete API Integration',
     assignedBy: 'Sachin Talwar',
-    assignedTo: '1',
-    dueDate: '2026-01-07',
+    assignedByUserId: 'admin-1',
+    assignedTo: 'user-1',
+    dueDate: '2026-01-20',
     dueTime: '5:00 PM',
     status: 'in_progress',
     priority: 'high',
-    tags: ['daily-priority'],
+    tags: ['tech', 'urgent'],
   },
   {
     id: '2',
-    title: 'Test 1',
+    title: 'Code Review - Auth Module',
     assignedBy: 'Sachin Talwar',
-    assignedTo: '1',
-    dueDate: '2026-01-07',
-    dueTime: '5:00 PM',
-    status: 'in_progress',
-    priority: 'high',
-    tags: ['daily-priority'],
+    assignedByUserId: 'admin-1',
+    assignedTo: 'user-1',
+    dueDate: '2026-01-18',
+    dueTime: '3:00 PM',
+    status: 'pending',
+    priority: 'medium',
+    tags: ['review'],
   },
   {
     id: '3',
-    title: 'Tes 3',
-    assignedBy: 'Sachin Talwar',
-    assignedTo: '1',
-    dueDate: '2026-01-07',
-    dueTime: '5:00 PM',
-    status: 'in_progress',
-    priority: 'medium',
-    tags: ['daily-priority'],
+    title: 'Team Standup Meeting',
+    assignedBy: 'Priya Sharma',
+    assignedByUserId: 'admin-2',
+    assignedTo: 'user-1',
+    dueDate: '2026-01-18',
+    dueTime: '10:00 AM',
+    status: 'completed',
+    priority: 'low',
+    tags: ['meeting'],
   },
+  // Tasks assigned to Neeti (user-2)
   {
     id: '4',
-    title: 'Team Meetings',
+    title: 'Write Blog Post - Q1 Updates',
     assignedBy: 'Sachin Talwar',
-    assignedTo: '1',
-    dueDate: '2026-01-07',
+    assignedByUserId: 'admin-1',
+    assignedTo: 'user-2',
+    dueDate: '2026-01-22',
     dueTime: '5:00 PM',
     status: 'in_progress',
-    priority: 'medium',
-    tags: ['daily-priority'],
+    priority: 'high',
+    tags: ['content', 'marketing'],
   },
   {
     id: '5',
-    title: 'Business Hour',
-    assignedBy: 'Sachin Talwar',
-    assignedTo: '1',
-    dueDate: '2026-01-07',
-    dueTime: '5:00 PM',
-    status: 'in_progress',
-    priority: 'low',
-    tags: ['daily-priority'],
+    title: 'Social Media Calendar',
+    assignedBy: 'Priya Sharma',
+    assignedByUserId: 'admin-2',
+    assignedTo: 'user-2',
+    dueDate: '2026-01-19',
+    dueTime: '2:00 PM',
+    status: 'pending',
+    priority: 'medium',
+    tags: ['social'],
   },
+  // Tasks assigned to Animesh (user-3)
   {
     id: '6',
-    title: 'WOWOS Meetings',
+    title: 'Design Landing Page Mockups',
     assignedBy: 'Sachin Talwar',
-    assignedTo: '1',
-    dueDate: '2026-01-07',
+    assignedByUserId: 'admin-1',
+    assignedTo: 'user-3',
+    dueDate: '2026-01-21',
     dueTime: '5:00 PM',
     status: 'in_progress',
+    priority: 'high',
+    tags: ['design', 'urgent'],
+  },
+  {
+    id: '7',
+    title: 'Update Brand Guidelines',
+    assignedBy: 'Priya Sharma',
+    assignedByUserId: 'admin-2',
+    assignedTo: 'user-3',
+    dueDate: '2026-01-25',
+    dueTime: '5:00 PM',
+    status: 'pending',
     priority: 'low',
-    tags: ['daily-priority'],
+    tags: ['branding'],
+  },
+  // Tasks assigned to Rahul (user-4)
+  {
+    id: '8',
+    title: '3D Product Renders',
+    assignedBy: 'Sachin Talwar',
+    assignedByUserId: 'admin-1',
+    assignedTo: 'user-4',
+    dueDate: '2026-01-23',
+    dueTime: '5:00 PM',
+    status: 'in_progress',
+    priority: 'high',
+    tags: ['3d', 'client'],
+  },
+  {
+    id: '9',
+    title: 'Animation for Event Promo',
+    assignedBy: 'Sachin Talwar',
+    assignedByUserId: 'admin-1',
+    assignedTo: 'user-4',
+    dueDate: '2026-01-24',
+    dueTime: '5:00 PM',
+    status: 'pending',
+    priority: 'medium',
+    tags: ['animation'],
+  },
+  // Tasks delegated by Amit (user-1) to others - to show delegated tasks
+  {
+    id: '10',
+    title: 'Unit Test Coverage',
+    assignedBy: 'Amit Talwar',
+    assignedByUserId: 'user-1',
+    assignedTo: 'user-4',
+    dueDate: '2026-01-20',
+    dueTime: '5:00 PM',
+    status: 'pending',
+    priority: 'medium',
+    tags: ['testing'],
+  },
+];
+
+// Mock leave requests
+const defaultLeaveRequests: LeaveRequest[] = [
+  {
+    id: '1',
+    userId: 'user-1',
+    userName: 'Amit Talwar',
+    fromDate: '2026-01-25',
+    toDate: '2026-01-26',
+    leaveType: { id: '1', name: 'Casual Leave', daysPerYear: 7, requiresDocument: false, isActive: true },
+    leaveCategory: 'full_day',
+    hodId: 'admin-1',
+    hodName: 'Sachin Talwar',
+    reason: 'Family function',
+    status: 'pending',
+    createdAt: '2026-01-15T10:00:00Z',
+  },
+  {
+    id: '2',
+    userId: 'user-2',
+    userName: 'Neeti Choudhary',
+    fromDate: '2026-01-20',
+    toDate: '2026-01-20',
+    leaveType: { id: '3', name: 'Sick Leave', daysPerYear: 7, requiresDocument: true, isActive: true },
+    leaveCategory: 'full_day',
+    hodId: 'admin-2',
+    hodName: 'Priya Sharma',
+    reason: 'Not feeling well',
+    status: 'approved',
+    createdAt: '2026-01-14T09:00:00Z',
+  },
+  {
+    id: '3',
+    userId: 'user-3',
+    userName: 'Animesh',
+    fromDate: '2026-01-28',
+    toDate: '2026-01-30',
+    leaveType: { id: '1', name: 'Casual Leave', daysPerYear: 7, requiresDocument: false, isActive: true },
+    leaveCategory: 'full_day',
+    hodId: 'admin-1',
+    hodName: 'Sachin Talwar',
+    reason: 'Personal work',
+    status: 'pending',
+    createdAt: '2026-01-16T11:00:00Z',
+  },
+];
+
+// Mock check-ins
+const defaultCheckIns: CheckIn[] = [
+  {
+    id: '1',
+    userId: 'user-1',
+    date: '2026-01-18',
+    checkInTime: '9:30 AM',
+    checkOutTime: '6:30 PM',
+    location: 'In Office (Gurugram)',
+    priorities: ['Complete API Integration', 'Code Review', 'Team Meeting'],
+  },
+  {
+    id: '2',
+    userId: 'user-1',
+    date: '2026-01-17',
+    checkInTime: '9:45 AM',
+    checkOutTime: '6:15 PM',
+    location: 'Work From Home',
+    priorities: ['Bug fixes', 'Documentation', 'Client call'],
+  },
+  {
+    id: '3',
+    userId: 'user-2',
+    date: '2026-01-18',
+    checkInTime: '10:00 AM',
+    checkOutTime: '6:00 PM',
+    location: 'In Office (Gurugram)',
+    priorities: ['Write blog post', 'Social media updates', 'Content review'],
   },
 ];
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const { user, isAdmin } = useAuth();
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>(defaultLeaveRequests);
   const [tasks, setTasks] = useState<Task[]>(defaultTasks);
-  const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
+  const [checkIns, setCheckIns] = useState<CheckIn[]>(defaultCheckIns);
   const [hrmsSettings, setHrmsSettings] = useState<HRMSSettings>(defaultHRMSSettings);
+
+  // Get current user as User type (for backward compatibility)
+  const currentUser: User | null = user ? {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    department: user.department,
+    role: user.role === 'admin' ? 'admin' : 'employee',
+  } : null;
+
+  // Helper: Get tasks assigned TO the current user
+  const getMyTasks = (): Task[] => {
+    if (!user) return [];
+    if (isAdmin) return tasks; // Admins see all tasks
+    return tasks.filter(t => t.assignedTo === user.id);
+  };
+
+  // Helper: Get tasks assigned BY the current user
+  const getDelegatedTasks = (): Task[] => {
+    if (!user) return [];
+    if (isAdmin) return tasks; // Admins see all tasks
+    return tasks.filter(t => t.assignedByUserId === user.id);
+  };
+
+  // Helper: Get leave requests for current user
+  const getMyLeaveRequests = (): LeaveRequest[] => {
+    if (!user) return [];
+    if (isAdmin) return leaveRequests; // Admins see all leave requests
+    return leaveRequests.filter(lr => lr.userId === user.id);
+  };
+
+  // Helper: Get check-ins for current user
+  const getMyCheckIns = (): CheckIn[] => {
+    if (!user) return [];
+    if (isAdmin) return checkIns; // Admins see all check-ins
+    return checkIns.filter(c => c.userId === user.id);
+  };
 
   return (
     <AppContext.Provider
       value={{
-        currentUser: defaultUser,
+        currentUser,
         users: defaultUsers,
         leaveRequests,
         tasks,
@@ -171,6 +343,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setTasks,
         setCheckIns,
         setHrmsSettings,
+        getMyTasks,
+        getDelegatedTasks,
+        getMyLeaveRequests,
+        getMyCheckIns,
       }}
     >
       {children}
