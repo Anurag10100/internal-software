@@ -18,6 +18,10 @@ interface AppContextType {
   getDelegatedTasks: () => Task[];
   getMyLeaveRequests: () => LeaveRequest[];
   getMyCheckIns: () => CheckIn[];
+  // Action methods
+  deleteTask: (taskId: string) => void;
+  updateTask: (taskId: string, updates: Partial<Task>) => void;
+  updateLeaveRequest: (requestId: string, updates: Partial<LeaveRequest>) => void;
 }
 
 const defaultUsers: User[] = [
@@ -330,6 +334,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return checkIns.filter(c => c.userId === user.id);
   };
 
+  // Action: Delete a task
+  const deleteTask = (taskId: string) => {
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+  };
+
+  // Action: Update a task
+  const updateTask = (taskId: string, updates: Partial<Task>) => {
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t));
+  };
+
+  // Action: Update a leave request
+  const updateLeaveRequest = (requestId: string, updates: Partial<LeaveRequest>) => {
+    setLeaveRequests(prev => prev.map(lr => lr.id === requestId ? { ...lr, ...updates } : lr));
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -347,6 +366,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         getDelegatedTasks,
         getMyLeaveRequests,
         getMyCheckIns,
+        deleteTask,
+        updateTask,
+        updateLeaveRequest,
       }}
     >
       {children}

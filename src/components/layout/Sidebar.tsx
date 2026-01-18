@@ -10,8 +10,11 @@ import {
   Briefcase,
   Bug,
   Shield,
+  X,
+  Send,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 
 interface NavChild {
   name: string;
@@ -66,7 +69,10 @@ const navigation: NavItem[] = [
 export default function Sidebar() {
   const location = useLocation();
   const { isAdmin, user } = useAuth();
+  const { success } = useToast();
   const [expandedItems, setExpandedItems] = useState<string[]>(['Task Delegation', 'HRMS']);
+  const [showBugModal, setShowBugModal] = useState(false);
+  const [bugReport, setBugReport] = useState({ title: '', description: '' });
 
   const toggleExpand = (name: string) => {
     setExpandedItems((prev) =>
@@ -85,6 +91,14 @@ export default function Sidebar() {
       ...item,
       children: item.children?.filter(child => !child.adminOnly || isAdmin),
     }));
+
+  const handleSubmitBugReport = () => {
+    if (bugReport.title && bugReport.description) {
+      success('Bug Report Submitted', 'Thank you for reporting this issue. Our team will look into it.');
+      setBugReport({ title: '', description: '' });
+      setShowBugModal(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full bg-white border-r border-gray-200 w-64">
@@ -219,11 +233,76 @@ export default function Sidebar() {
 
       {/* Report Bug */}
       <div className="p-4 border-t border-gray-200">
-        <button className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors">
+        <button
+          onClick={() => setShowBugModal(true)}
+          className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+        >
           <Bug className="w-4 h-4" />
           <span>Report Bug</span>
         </button>
       </div>
+
+      {/* Bug Report Modal */}
+      {showBugModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Bug className="w-5 h-5 text-red-500" />
+                <h2 className="text-xl font-semibold text-gray-900">Report a Bug</h2>
+              </div>
+              <button
+                onClick={() => setShowBugModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Bug Title</label>
+                <input
+                  type="text"
+                  value={bugReport.title}
+                  onChange={(e) => setBugReport({ ...bugReport, title: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="Brief description of the issue"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={bugReport.description}
+                  onChange={(e) => setBugReport({ ...bugReport, description: e.target.value })}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                  placeholder="Please describe the bug in detail. Include steps to reproduce if possible."
+                />
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs text-gray-500">
+                  Your report will be sent to the development team along with your user info ({user?.email}).
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 p-6 border-t border-gray-100">
+              <button
+                onClick={() => setShowBugModal(false)}
+                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitBugReport}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
+              >
+                <Send className="w-4 h-4" />
+                Submit Report
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

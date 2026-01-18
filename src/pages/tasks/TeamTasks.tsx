@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Plus, Check, Clock, Tag } from 'lucide-react';
+import { Plus, Check, Clock, Tag, X } from 'lucide-react';
 import CreateTaskModal from '../../components/modals/CreateTaskModal';
+import { useToast } from '../../context/ToastContext';
 
 interface TeamTask {
   id: string;
@@ -16,9 +17,11 @@ interface TeamTask {
 }
 
 export default function TeamTasks() {
+  const { success } = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('Current Week');
+  const [completingTask, setCompletingTask] = useState<TeamTask | null>(null);
 
   // Department counts
   const departments = [
@@ -37,7 +40,7 @@ export default function TeamTasks() {
   ];
 
   // Mock extended task data
-  const teamTasks: TeamTask[] = [
+  const [teamTasks, setTeamTasks] = useState<TeamTask[]>([
     { id: '1', title: 'Add Mail Subscribe Widget in WOWOS Website', assignedTo: 'Tarun Fuloria', assignedBy: 'Sachin', dueDate: 'Dec 26', dueTime: '5:30 PM', daysAgo: 12, department: 'tech', tags: [], status: 'in_progress' },
     { id: '2', title: 'Zoom call - 2 Web Developer', assignedTo: 'Tanvi', assignedBy: 'Sachin', dueDate: 'Jan 2', dueTime: '6:00 PM', daysAgo: 5, department: 'hr', tags: [], status: 'in_progress' },
     { id: '3', title: 'Share cost with KM Client - PAMEX', assignedTo: 'Prakrati Maheshwari', assignedBy: 'Sachin', dueDate: 'Jan 2', dueTime: '8:00 PM', daysAgo: 5, department: 'nbd', tags: [], status: 'in_progress' },
@@ -46,11 +49,11 @@ export default function TeamTasks() {
     { id: '6', title: 'WOWOS Video 2', assignedTo: 'Arya', assignedBy: 'Sachin', dueDate: 'Jan 5', dueTime: '5:00 PM', daysAgo: 2, department: 'video', tags: ['daily-priority'], status: 'in_progress' },
     { id: '7', title: 'Laminator Meet Vendor Costing', assignedTo: 'Pankaj', assignedBy: 'Sachin', dueDate: 'Jan 5', dueTime: '5:00 PM', daysAgo: 2, department: 'ops', tags: ['daily-priority'], status: 'in_progress' },
     { id: '8', title: 'Sleepwell Content', assignedTo: 'Ankit Singh', assignedBy: 'Sachin', dueDate: 'Jan 5', dueTime: '5:00 PM', daysAgo: 2, department: 'concept', tags: [], status: 'in_progress' },
-  ];
+  ]);
 
   const filteredTasks = departmentFilter === 'all'
-    ? teamTasks
-    : teamTasks.filter(t => t.department === departmentFilter);
+    ? teamTasks.filter(t => t.status !== 'completed')
+    : teamTasks.filter(t => t.department === departmentFilter && t.status !== 'completed');
 
   const stats = {
     totalTasks: 352,
@@ -84,6 +87,16 @@ export default function TeamTasks() {
       case 'yellow': return 'bg-yellow-500';
       case 'red': return 'bg-red-500';
       default: return 'bg-gray-500';
+    }
+  };
+
+  const handleMarkComplete = () => {
+    if (completingTask) {
+      setTeamTasks(prev => prev.map(t =>
+        t.id === completingTask.id ? { ...t, status: 'completed' as const } : t
+      ));
+      success('Task completed', `"${completingTask.title}" has been marked as complete`);
+      setCompletingTask(null);
     }
   };
 
@@ -197,7 +210,10 @@ export default function TeamTasks() {
                       </div>
                     </div>
                   </div>
-                  <button className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-primary-600 border border-primary-200 rounded-lg hover:bg-primary-50 transition-colors whitespace-nowrap">
+                  <button
+                    onClick={() => setCompletingTask(task)}
+                    className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-primary-600 border border-primary-200 rounded-lg hover:bg-primary-50 transition-colors whitespace-nowrap"
+                  >
                     <Check className="w-4 h-4" />
                     Mark as Complete
                   </button>
@@ -262,6 +278,46 @@ export default function TeamTasks() {
 
       {showCreateModal && (
         <CreateTaskModal onClose={() => setShowCreateModal(false)} />
+      )}
+
+      {/* Complete Task Confirmation Modal */}
+      {completingTask && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
+            <div className="flex items-center justify-between p-6 border-b border-gray-100">
+              <h2 className="text-xl font-semibold text-gray-900">Mark as Complete?</h2>
+              <button
+                onClick={() => setCompletingTask(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-gray-600">
+                Are you sure you want to mark <strong>"{completingTask.title}"</strong> as complete?
+              </p>
+              <p className="text-sm text-gray-500 mt-2">
+                Assigned to: {completingTask.assignedTo}
+              </p>
+            </div>
+            <div className="flex gap-3 p-6 border-t border-gray-100">
+              <button
+                onClick={() => setCompletingTask(null)}
+                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleMarkComplete}
+                className="flex-1 px-4 py-2 text-white bg-green-500 hover:bg-green-600 rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                <Check className="w-4 h-4" />
+                Complete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
