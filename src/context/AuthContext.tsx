@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import api from '../services/api';
 
-export type UserRole = 'admin' | 'user';
+export type UserRole = 'admin' | 'employee';
 
 export interface AuthUser {
   id: string;
@@ -23,7 +24,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock user database
+// Fallback mock users for when server is not available
 const MOCK_USERS: (AuthUser & { password: string })[] = [
   {
     id: 'admin-1',
@@ -35,49 +36,13 @@ const MOCK_USERS: (AuthUser & { password: string })[] = [
     designation: 'CEO',
   },
   {
-    id: 'admin-2',
-    email: 'hr@wowevents.com',
-    password: 'hr123',
-    name: 'Priya Sharma',
-    role: 'admin',
-    department: 'HR',
-    designation: 'HR Manager',
-  },
-  {
     id: 'user-1',
     email: 'amit@wowevents.com',
     password: 'user123',
     name: 'Amit Talwar',
-    role: 'user',
+    role: 'employee',
     department: 'Tech',
     designation: 'Tech Lead',
-  },
-  {
-    id: 'user-2',
-    email: 'neeti@wowevents.com',
-    password: 'user123',
-    name: 'Neeti Choudhary',
-    role: 'user',
-    department: 'Concept & Copy',
-    designation: 'Content Writer',
-  },
-  {
-    id: 'user-3',
-    email: 'animesh@wowevents.com',
-    password: 'user123',
-    name: 'Animesh',
-    role: 'user',
-    department: '2D',
-    designation: 'Graphic Designer',
-  },
-  {
-    id: 'user-4',
-    email: 'rahul@wowevents.com',
-    password: 'user123',
-    name: 'Rahul Kumar',
-    role: 'user',
-    department: '3D',
-    designation: '3D Artist',
   },
 ];
 
@@ -87,20 +52,92 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Check for stored session on mount
-    const storedUser = localStorage.getItem('auth_user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch {
-        localStorage.removeItem('auth_user');
+    const token = localStorage.getItem('token');
+    if (token) {
+      api.setToken(token);
+      loadUser();
+    } else {
+      // Check for old auth_user storage (fallback)
+      const storedUser = localStorage.getItem('auth_user');
+      if (storedUser) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch {
+          localStorage.removeItem('auth_user');
+        }
       }
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, []);
 
+  const loadUser = async () => {
+    try {
+      const { data } = await api.getMe();
+      if (data?.user) {
+        const userData: AuthUser = {
+          id: data.user.id,
+          email: data.user.email,
+          name: data.user.name,
+          role: data.user.role === 'admin' ? 'admin' : 'employee',
+          department: data.user.department,
+          designation: data.user.designation || '',
+          avatar: data.user.avatar,
+        };
+        setUser(userData);
+        localStorage.setItem('auth_user', JSON.stringify(userData));
+      } else {
+        // Token invalid, clear it
+        api.setToken(null);
+        localStorage.removeItem('auth_user');
+      }
+    } catch (error) {
+      console.error('Failed to load user:', error);
+      api.setToken(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const login = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      // Try API login first
+      const { data, error } = await api.login(email, password);
+
+      if (data?.token && data?.user) {
+        api.setToken(data.token);
+        const userData: AuthUser = {
+          id: data.user.id,
+          email: data.user.email,
+          name: data.user.name,
+          role: data.user.role === 'admin' ? 'admin' : 'employee',
+          department: data.user.department,
+          designation: data.user.designation || '',
+          avatar: data.user.avatar,
+        };
+        setUser(userData);
+        localStorage.setItem('auth_user', JSON.stringify(userData));
+        return { success: true };
+      }
+
+      if (error) {
+        // If server is down, fall back to mock users
+        if (error.includes('Network error')) {
+          return fallbackLogin(email, password);
+        }
+        return { success: false, error };
+      }
+
+      return { success: false, error: 'Invalid response from server' };
+    } catch (error) {
+      console.error('Login error:', error);
+      // Fall back to mock users if server is not available
+      return fallbackLogin(email, password);
+    }
+  };
+
+  const fallbackLogin = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 300));
 
     const foundUser = MOCK_USERS.find(
       u => u.email.toLowerCase() === email.toLowerCase() && u.password === password
@@ -117,8 +154,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
+    api.setToken(null);
     setUser(null);
     localStorage.removeItem('auth_user');
+    localStorage.removeItem('token');
   };
 
   const value: AuthContextType = {
