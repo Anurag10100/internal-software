@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Users, UserCheck, Clock, Calendar as CalendarIcon, Coffee, X, Search, Image } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
 
 interface TeamMember {
   id: string;
@@ -16,7 +15,6 @@ interface TeamMember {
 }
 
 export default function TeamCheckIns() {
-  const { users } = useApp();
   const [selectedDate, setSelectedDate] = useState('2026-01-07');
   const [searchQuery, setSearchQuery] = useState('');
 

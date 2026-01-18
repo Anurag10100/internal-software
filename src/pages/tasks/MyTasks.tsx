@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Plus, Check, Clock, Calendar, Tag, Info } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import CreateTaskModal from '../../components/modals/CreateTaskModal';
@@ -38,7 +38,7 @@ export default function MyTasks() {
     setShowCompleteModal(true);
   };
 
-  const handleMarkComplete = (imageUrl: string | null) => {
+  const handleMarkComplete = () => {
     if (selectedTaskId) {
       setTasks(prev =>
         prev.map(t => t.id === selectedTaskId ? { ...t, status: 'completed' } : t)

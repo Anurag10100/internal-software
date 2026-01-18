@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Search, Bell, Menu } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import DailyCheckInModal from '../modals/DailyCheckInModal';

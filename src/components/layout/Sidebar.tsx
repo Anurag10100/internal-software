@@ -1,19 +1,13 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   Star,
   ListTodo,
-  ClipboardList,
   Users,
-  Calendar,
-  Building2,
   ChevronDown,
   ChevronRight,
   Settings,
   Briefcase,
-  Clock,
-  UserCheck,
-  CalendarCheck,
   Bug,
 } from 'lucide-react';
 

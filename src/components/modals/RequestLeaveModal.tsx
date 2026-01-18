@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -7,7 +7,7 @@ interface RequestLeaveModalProps {
 }
 
 export default function RequestLeaveModal({ onClose }: RequestLeaveModalProps) {
-  const { hrmsSettings, users, setLeaveRequests, currentUser } = useApp();
+  const { hrmsSettings, setLeaveRequests, currentUser } = useApp();
 
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');

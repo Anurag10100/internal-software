@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Plus, Search, Settings, MoreVertical, ChevronDown } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
 
 interface TeamMember {
   id: string;
@@ -17,7 +16,6 @@ interface TeamMember {
 }
 
 export default function TeamManagement() {
-  const { users } = useApp();
   const [activeTab, setActiveTab] = useState<'users' | 'profiles'>('users');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);

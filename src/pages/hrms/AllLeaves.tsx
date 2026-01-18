@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Calendar, Clock, User, Check, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 

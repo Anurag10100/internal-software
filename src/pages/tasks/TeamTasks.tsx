@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
-import { Plus, Check, Clock, Calendar, Tag, User } from 'lucide-react';
-import { useApp } from '../../context/AppContext';
+import { useState } from 'react';
+import { Plus, Check, Clock, Tag } from 'lucide-react';
 import CreateTaskModal from '../../components/modals/CreateTaskModal';
 
 interface TeamTask {
@@ -17,7 +16,6 @@ interface TeamTask {
 }
 
 export default function TeamTasks() {
-  const { tasks, users, setTasks } = useApp();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('Current Week');
