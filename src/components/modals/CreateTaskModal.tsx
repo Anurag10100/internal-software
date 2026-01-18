@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
 
 interface CreateTaskModalProps {
   onClose: () => void;
 }
 
 export default function CreateTaskModal({ onClose }: CreateTaskModalProps) {
-  const { users, setTasks, currentUser } = useApp();
+  const { users, createTask, currentUser } = useApp();
+  const { success, error: showError } = useToast();
 
   const [title, setTitle] = useState('');
   const [assignedTo, setAssignedTo] = useState('');
@@ -15,29 +17,33 @@ export default function CreateTaskModal({ onClose }: CreateTaskModalProps) {
   const [dueTime, setDueTime] = useState('17:00');
   const [priority, setPriority] = useState('medium');
   const [description, setDescription] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!currentUser) return;
 
-    const newTask = {
-      id: Date.now().toString(),
-      title,
-      assignedBy: currentUser.name,
-      assignedByUserId: currentUser.id,
-      assignedByAvatar: currentUser.avatar,
-      assignedTo,
-      dueDate,
-      dueTime: formatTime(dueTime),
-      status: 'pending' as const,
-      priority: priority as 'high' | 'medium' | 'low',
-      tags: [],
-      description,
-    };
+    setIsSubmitting(true);
 
-    setTasks(prev => [...prev, newTask]);
-    onClose();
+    try {
+      await createTask({
+        title,
+        description,
+        assignedTo,
+        dueDate,
+        dueTime: formatTime(dueTime),
+        priority: priority as 'high' | 'medium' | 'low',
+        tags: [],
+      });
+
+      success('Task Created', `Task "${title}" has been assigned successfully`);
+      onClose();
+    } catch (err) {
+      showError('Failed to Create Task', 'Please try again');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const formatTime = (time: string) => {
@@ -167,9 +173,10 @@ export default function CreateTaskModal({ onClose }: CreateTaskModalProps) {
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2 bg-danger-500 text-white rounded-lg text-sm font-medium hover:bg-danger-600 transition-colors"
+              disabled={isSubmitting}
+              className="flex-1 px-4 py-2 bg-danger-500 text-white rounded-lg text-sm font-medium hover:bg-danger-600 transition-colors disabled:opacity-50"
             >
-              Create Task
+              {isSubmitting ? 'Creating...' : 'Create Task'}
             </button>
           </div>
         </form>
