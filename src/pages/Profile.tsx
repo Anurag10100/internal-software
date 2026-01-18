@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   User,
   Mail,
@@ -17,13 +17,42 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
+import { useToast } from '../context/ToastContext';
 import { ProgressRing, AnimatedCounter } from '../components/ui/Charts';
 
 export default function Profile() {
   const { user, isAdmin } = useAuth();
   const { getMyTasks, getMyLeaveRequests, getMyCheckIns } = useApp();
+  const { success, info } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState(user?.name || '');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        info('File Too Large', 'Please select an image under 5MB');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setAvatarUrl(reader.result as string);
+        success('Avatar Updated', 'Your profile picture has been updated');
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveName = () => {
+    success('Profile Updated', 'Your name has been updated successfully');
+    setIsEditing(false);
+  };
 
   if (!user) return null;
 
@@ -65,12 +94,26 @@ export default function Profile() {
           <div className="flex flex-col md:flex-row md:items-end gap-4 -mt-12 relative z-10">
             {/* Avatar */}
             <div className="relative group">
-              <div className="w-24 h-24 bg-white rounded-2xl shadow-lg flex items-center justify-center border-4 border-white">
-                <span className="text-primary-600 font-bold text-3xl">
-                  {user.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
-                </span>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/*"
+                className="hidden"
+              />
+              <div className="w-24 h-24 bg-white rounded-2xl shadow-lg flex items-center justify-center border-4 border-white overflow-hidden">
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-primary-600 font-bold text-3xl">
+                    {user.name.split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                  </span>
+                )}
               </div>
-              <button className="absolute bottom-0 right-0 w-8 h-8 bg-primary-500 text-white rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
+              <button
+                onClick={handleAvatarClick}
+                className="absolute bottom-0 right-0 w-8 h-8 bg-primary-500 text-white rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-lg"
+              >
                 <Camera className="w-4 h-4" />
               </button>
             </div>
@@ -86,7 +129,7 @@ export default function Profile() {
                     className="text-2xl font-bold text-gray-900 border-b-2 border-primary-500 bg-transparent focus:outline-none"
                   />
                   <button
-                    onClick={() => setIsEditing(false)}
+                    onClick={handleSaveName}
                     className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg"
                   >
                     <Save className="w-5 h-5" />

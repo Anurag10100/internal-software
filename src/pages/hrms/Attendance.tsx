@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Download, Search } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useToast } from '../../context/ToastContext';
 
 type AttendanceStatus = 'P' | 'L' | 'LV' | 'HD' | 'HO' | 'WO' | 'A';
 
@@ -13,6 +14,7 @@ interface EmployeeAttendance {
 
 export default function Attendance() {
   const { hrmsSettings } = useApp();
+  const { success } = useToast();
   const [selectedMonth, setSelectedMonth] = useState('January');
   const [selectedYear, setSelectedYear] = useState(2026);
   const [searchQuery, setSearchQuery] = useState('');
@@ -133,6 +135,37 @@ export default function Attendance() {
   const currentDate = new Date();
   const todayFormatted = `${currentDate.getDate()} ${months[currentDate.getMonth()]} ${currentDate.getFullYear()}`;
 
+  const handleExportCSV = () => {
+    // Generate CSV content
+    let csv = 'No.,Name,Email,Present %,Total Present';
+    days.forEach(day => {
+      csv += `,${day}`;
+    });
+    csv += '\n';
+
+    filteredEmployees.forEach((employee, index) => {
+      const stats = calculateStats(employee.attendance);
+      csv += `${index + 1},"${employee.name}","${employee.email}",${stats.presentPercent}%,${stats.present}`;
+      days.forEach(day => {
+        csv += `,${employee.attendance[day]}`;
+      });
+      csv += '\n';
+    });
+
+    // Create and download the file
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `attendance_${selectedMonth}_${selectedYear}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    success('Export Complete', `Attendance data for ${selectedMonth} ${selectedYear} has been downloaded`);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -167,7 +200,10 @@ export default function Attendance() {
               className="pl-10 pr-4 py-2 w-48 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 transition-colors">
+          <button
+            onClick={handleExportCSV}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 transition-colors"
+          >
             <Download className="w-4 h-4" />
             Export to CSV
           </button>
