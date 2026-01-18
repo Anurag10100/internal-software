@@ -1,0 +1,10 @@
+{
+  "name": "employee-management-server",
+  "version": "1.0.0",
+  "description": "Backend server for employee management system",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  }
+}
