@@ -1,8 +1,11 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
+import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/layout/Layout';
 
 // Pages
+import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import MyTasks from './pages/tasks/MyTasks';
 import DelegatedTasks from './pages/tasks/DelegatedTasks';
@@ -17,40 +20,76 @@ import TeamManagement from './pages/team/TeamManagement';
 
 function App() {
   return (
-    <AppProvider>
-      <Layout>
+    <AuthProvider>
+      <AppProvider>
         <Routes>
-          {/* Dashboard */}
-          <Route path="/" element={<Dashboard />} />
+          {/* Public Route */}
+          <Route path="/login" element={<Login />} />
 
-          {/* Task Management */}
-          <Route path="/tasks/my-tasks" element={<MyTasks />} />
-          <Route path="/tasks/delegated" element={<DelegatedTasks />} />
-          <Route path="/tasks/team" element={<TeamTasks />} />
-          <Route path="/tasks/ace-meeting" element={<MyTasks />} />
+          {/* Protected Routes */}
+          <Route
+            path="/*"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Routes>
+                    {/* Dashboard */}
+                    <Route path="/" element={<Dashboard />} />
 
-          {/* HRMS */}
-          <Route path="/hrms/my-leaves" element={<MyLeaves />} />
-          <Route path="/hrms/all-leaves" element={<AllLeaves />} />
-          <Route path="/hrms/check-ins" element={<CheckIns />} />
-          <Route path="/hrms/team-check-ins" element={<TeamCheckIns />} />
-          <Route path="/hrms/attendance" element={<Attendance />} />
-          <Route path="/hrms/settings" element={<Settings />} />
+                    {/* Task Management */}
+                    <Route path="/tasks/my-tasks" element={<MyTasks />} />
+                    <Route path="/tasks/delegated" element={<DelegatedTasks />} />
+                    <Route path="/tasks/team" element={<TeamTasks />} />
+                    <Route path="/tasks/ace-meeting" element={<MyTasks />} />
 
-          {/* Team Management */}
-          <Route path="/team/management" element={<TeamManagement />} />
-          <Route path="/team/employees" element={<TeamManagement />} />
-          <Route path="/team/departments" element={<TeamManagement />} />
+                    {/* HRMS */}
+                    <Route path="/hrms/my-leaves" element={<MyLeaves />} />
+                    <Route path="/hrms/all-leaves" element={<AllLeaves />} />
+                    <Route path="/hrms/check-ins" element={<CheckIns />} />
+                    <Route path="/hrms/team-check-ins" element={<TeamCheckIns />} />
+                    <Route path="/hrms/attendance" element={<Attendance />} />
+                    <Route path="/hrms/settings" element={<Settings />} />
 
-          {/* Placeholder routes */}
-          <Route path="/crm" element={<Dashboard />} />
-          <Route path="/company-settings" element={<Settings />} />
+                    {/* Team Management - Admin Only */}
+                    <Route
+                      path="/team/management"
+                      element={
+                        <ProtectedRoute requireAdmin>
+                          <TeamManagement />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/team/employees"
+                      element={
+                        <ProtectedRoute requireAdmin>
+                          <TeamManagement />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/team/departments"
+                      element={
+                        <ProtectedRoute requireAdmin>
+                          <TeamManagement />
+                        </ProtectedRoute>
+                      }
+                    />
 
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+                    {/* Placeholder routes */}
+                    <Route path="/crm" element={<Dashboard />} />
+                    <Route path="/company-settings" element={<Settings />} />
+
+                    {/* Fallback */}
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
         </Routes>
-      </Layout>
-    </AppProvider>
+      </AppProvider>
+    </AuthProvider>
   );
 }
 

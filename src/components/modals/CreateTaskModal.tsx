@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -19,10 +19,13 @@ export default function CreateTaskModal({ onClose }: CreateTaskModalProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!currentUser) return;
+
     const newTask = {
       id: Date.now().toString(),
       title,
       assignedBy: currentUser.name,
+      assignedByUserId: currentUser.id,
       assignedByAvatar: currentUser.avatar,
       assignedTo,
       dueDate,

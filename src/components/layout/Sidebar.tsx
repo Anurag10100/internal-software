@@ -9,13 +9,22 @@ import {
   Settings,
   Briefcase,
   Bug,
+  Shield,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+
+interface NavChild {
+  name: string;
+  href: string;
+  adminOnly?: boolean;
+}
 
 interface NavItem {
   name: string;
   href?: string;
   icon: React.ElementType;
-  children?: { name: string; href: string }[];
+  children?: NavChild[];
+  adminOnly?: boolean;
 }
 
 const navigation: NavItem[] = [
@@ -26,8 +35,8 @@ const navigation: NavItem[] = [
     children: [
       { name: 'My Tasks', href: '/tasks/my-tasks' },
       { name: 'Delegated Tasks', href: '/tasks/delegated' },
-      { name: 'Team Tasks', href: '/tasks/team' },
-      { name: 'A.C.E. Meeting', href: '/tasks/ace-meeting' },
+      { name: 'Team Tasks', href: '/tasks/team', adminOnly: true },
+      { name: 'A.C.E. Meeting', href: '/tasks/ace-meeting', adminOnly: true },
     ],
   },
   {
@@ -35,26 +44,28 @@ const navigation: NavItem[] = [
     icon: Briefcase,
     children: [
       { name: 'My Leaves', href: '/hrms/my-leaves' },
-      { name: 'All Leaves', href: '/hrms/all-leaves' },
+      { name: 'All Leaves', href: '/hrms/all-leaves', adminOnly: true },
       { name: 'Check-ins', href: '/hrms/check-ins' },
-      { name: 'Team Check-in', href: '/hrms/team-check-ins' },
-      { name: 'Attendance', href: '/hrms/attendance' },
-      { name: 'Settings', href: '/hrms/settings' },
+      { name: 'Team Check-in', href: '/hrms/team-check-ins', adminOnly: true },
+      { name: 'Attendance', href: '/hrms/attendance', adminOnly: true },
+      { name: 'Settings', href: '/hrms/settings', adminOnly: true },
     ],
   },
   {
     name: 'Team Management',
     icon: Users,
+    adminOnly: true,
     children: [
       { name: 'All Employees', href: '/team/employees' },
       { name: 'Departments', href: '/team/departments' },
     ],
   },
-  { name: 'Company Settings', href: '/company-settings', icon: Settings },
+  { name: 'Company Settings', href: '/company-settings', icon: Settings, adminOnly: true },
 ];
 
 export default function Sidebar() {
   const location = useLocation();
+  const { isAdmin, user } = useAuth();
   const [expandedItems, setExpandedItems] = useState<string[]>(['Task Delegation', 'HRMS']);
 
   const toggleExpand = (name: string) => {
@@ -64,8 +75,16 @@ export default function Sidebar() {
   };
 
   const isActive = (href: string) => location.pathname === href;
-  const isParentActive = (children: { href: string }[]) =>
+  const isParentActive = (children: NavChild[]) =>
     children.some((child) => location.pathname === child.href);
+
+  // Filter navigation based on role
+  const filteredNavigation = navigation
+    .filter(item => !item.adminOnly || isAdmin)
+    .map(item => ({
+      ...item,
+      children: item.children?.filter(child => !child.adminOnly || isAdmin),
+    }));
 
   return (
     <div className="flex flex-col h-full bg-white border-r border-gray-200 w-64">
@@ -80,12 +99,31 @@ export default function Sidebar() {
         </div>
       </div>
 
+      {/* User Role Badge */}
+      {user && (
+        <div className="px-4 py-3 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            {isAdmin ? (
+              <span className="flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                <Shield className="w-3 h-3" />
+                Admin
+              </span>
+            ) : (
+              <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                Employee
+              </span>
+            )}
+            <span className="text-xs text-gray-500">{user.department}</span>
+          </div>
+        </div>
+      )}
+
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4">
         <ul className="space-y-1 px-2">
-          {navigation.map((item) => (
+          {filteredNavigation.map((item) => (
             <li key={item.name}>
-              {item.children ? (
+              {item.children && item.children.length > 0 ? (
                 <div>
                   <button
                     onClick={() => toggleExpand(item.name)}
@@ -124,11 +162,11 @@ export default function Sidebar() {
                     </ul>
                   )}
                 </div>
-              ) : (
+              ) : item.href ? (
                 <Link
-                  to={item.href!}
+                  to={item.href}
                   className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                    isActive(item.href!)
+                    isActive(item.href)
                       ? 'bg-primary-50 text-primary-700'
                       : 'text-gray-700 hover:bg-gray-100'
                   }`}
@@ -136,37 +174,47 @@ export default function Sidebar() {
                   <item.icon className="w-5 h-5" />
                   <span>{item.name}</span>
                 </Link>
-              )}
+              ) : null}
             </li>
           ))}
         </ul>
 
-        {/* Admin Section */}
-        <div className="mt-6 px-4">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-            Admin
-          </p>
-          <ul className="space-y-1 px-2">
-            <li>
-              <Link
-                to="/team/management"
-                className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg text-gray-700 hover:bg-gray-100"
-              >
-                <Users className="w-5 h-5" />
-                <span>Team Management</span>
-              </Link>
-            </li>
-            <li>
-              <Link
-                to="/company-settings"
-                className="flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg text-gray-700 hover:bg-gray-100"
-              >
-                <Settings className="w-5 h-5" />
-                <span>Company Settings</span>
-              </Link>
-            </li>
-          </ul>
-        </div>
+        {/* Admin Section - Only show for admins */}
+        {isAdmin && (
+          <div className="mt-6 px-4">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              Admin
+            </p>
+            <ul className="space-y-1 px-2">
+              <li>
+                <Link
+                  to="/team/management"
+                  className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    isActive('/team/management')
+                      ? 'bg-primary-50 text-primary-700'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  <Users className="w-5 h-5" />
+                  <span>Team Management</span>
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/company-settings"
+                  className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    isActive('/company-settings')
+                      ? 'bg-primary-50 text-primary-700'
+                      : 'text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  <Settings className="w-5 h-5" />
+                  <span>Company Settings</span>
+                </Link>
+              </li>
+            </ul>
+          </div>
+        )}
       </nav>
 
       {/* Report Bug */}

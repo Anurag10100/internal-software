@@ -54,10 +54,10 @@ function CircularProgress({ value, max, color, size = 120 }: CircularProgressPro
 }
 
 export default function MyLeaves() {
-  const { leaveRequests, currentUser } = useApp();
+  const { getMyLeaveRequests } = useApp();
   const [showRequestModal, setShowRequestModal] = useState(false);
 
-  const myLeaves = leaveRequests.filter(lr => lr.userId === currentUser.id);
+  const myLeaves = getMyLeaveRequests();
 
   // Leave balance data with colors
   const leaveBalance = [
