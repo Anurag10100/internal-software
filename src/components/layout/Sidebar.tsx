@@ -90,7 +90,7 @@ export default function Sidebar() {
     <div className="flex flex-col h-full bg-white border-r border-gray-200 w-64">
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-4 border-b border-gray-200">
-        <div className="w-10 h-10 bg-primary-500 rounded-lg flex items-center justify-center">
+        <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center shadow-lg shadow-primary-200">
           <span className="text-white font-bold text-lg">W</span>
         </div>
         <div>
@@ -101,20 +101,20 @@ export default function Sidebar() {
 
       {/* User Role Badge */}
       {user && (
-        <div className="px-4 py-3 border-b border-gray-100">
+        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50">
           <div className="flex items-center gap-2">
             {isAdmin ? (
-              <span className="flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+              <span className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium">
                 <Shield className="w-3 h-3" />
-                Admin
+                Admin Access
               </span>
             ) : (
-              <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                Employee
+              <span className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium">
+                Employee Access
               </span>
             )}
-            <span className="text-xs text-gray-500">{user.department}</span>
           </div>
+          <p className="text-xs text-gray-500 mt-1.5">{user.department} Department</p>
         </div>
       )}
 
@@ -127,7 +127,7 @@ export default function Sidebar() {
                 <div>
                   <button
                     onClick={() => toggleExpand(item.name)}
-                    className={`w-full flex items-center justify-between px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
                       isParentActive(item.children)
                         ? 'bg-primary-50 text-primary-700'
                         : 'text-gray-700 hover:bg-gray-100'
@@ -144,14 +144,14 @@ export default function Sidebar() {
                     )}
                   </button>
                   {expandedItems.includes(item.name) && (
-                    <ul className="mt-1 ml-8 space-y-1">
+                    <ul className="mt-1 ml-8 space-y-0.5">
                       {item.children.map((child) => (
                         <li key={child.name}>
                           <Link
                             to={child.href}
                             className={`block px-3 py-2 text-sm rounded-lg transition-colors ${
                               isActive(child.href)
-                                ? 'bg-primary-500 text-white'
+                                ? 'bg-primary-500 text-white shadow-md shadow-primary-200'
                                 : 'text-gray-600 hover:bg-gray-100'
                             }`}
                           >
@@ -165,7 +165,7 @@ export default function Sidebar() {
               ) : item.href ? (
                 <Link
                   to={item.href}
-                  className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
                     isActive(item.href)
                       ? 'bg-primary-50 text-primary-700'
                       : 'text-gray-700 hover:bg-gray-100'
@@ -189,7 +189,7 @@ export default function Sidebar() {
               <li>
                 <Link
                   to="/team/management"
-                  className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
                     isActive('/team/management')
                       ? 'bg-primary-50 text-primary-700'
                       : 'text-gray-700 hover:bg-gray-100'
@@ -202,7 +202,7 @@ export default function Sidebar() {
               <li>
                 <Link
                   to="/company-settings"
-                  className={`flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
                     isActive('/company-settings')
                       ? 'bg-primary-50 text-primary-700'
                       : 'text-gray-700 hover:bg-gray-100'
@@ -219,7 +219,7 @@ export default function Sidebar() {
 
       {/* Report Bug */}
       <div className="p-4 border-t border-gray-200">
-        <button className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900">
+        <button className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors">
           <Bug className="w-4 h-4" />
           <span>Report Bug</span>
         </button>
