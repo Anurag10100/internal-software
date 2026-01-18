@@ -14,6 +14,7 @@ import CheckIns from './pages/hrms/CheckIns';
 import TeamCheckIns from './pages/hrms/TeamCheckIns';
 import Attendance from './pages/hrms/Attendance';
 import Settings from './pages/hrms/Settings';
+import TeamManagement from './pages/team/TeamManagement';
 
 function App() {
   return (
@@ -37,9 +38,13 @@ function App() {
           <Route path="/hrms/attendance" element={<Attendance />} />
           <Route path="/hrms/settings" element={<Settings />} />
 
+          {/* Team Management */}
+          <Route path="/team/management" element={<TeamManagement />} />
+          <Route path="/team/employees" element={<TeamManagement />} />
+          <Route path="/team/departments" element={<TeamManagement />} />
+
           {/* Placeholder routes */}
           <Route path="/crm" element={<Dashboard />} />
-          <Route path="/team/*" element={<Dashboard />} />
           <Route path="/company-settings" element={<Settings />} />
 
           {/* Fallback */}
