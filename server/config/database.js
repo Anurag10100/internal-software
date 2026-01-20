@@ -1,6 +1,7 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 const bcrypt = require('bcryptjs');
+const { createExtendedTables, seedExtendedData } = require('./schema-extensions');
 
 const dbPath = path.join(__dirname, '..', 'data', 'database.sqlite');
 const db = new Database(dbPath);
@@ -321,6 +322,10 @@ function initializeDatabase() {
 
   // Seed default data if empty
   seedDefaultData();
+
+  // Create extended enterprise tables
+  createExtendedTables(db);
+  seedExtendedData(db);
 }
 
 function seedDefaultData() {

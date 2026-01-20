@@ -33,6 +33,18 @@ import Goals from './pages/appraisals/Goals';
 import ProbationDashboard from './pages/probation/ProbationDashboard';
 import MyProbation from './pages/probation/MyProbation';
 
+// Enterprise Modules
+import PayrollDashboard from './pages/payroll/PayrollDashboard';
+import RecruitmentDashboard from './pages/recruitment/RecruitmentDashboard';
+import LearningDashboard from './pages/learning/LearningDashboard';
+import AssetDashboard from './pages/assets/AssetDashboard';
+import ExpenseDashboard from './pages/expenses/ExpenseDashboard';
+import OrgChart from './pages/organization/OrgChart';
+import DocumentCenter from './pages/documents/DocumentCenter';
+import AnnouncementCenter from './pages/announcements/AnnouncementCenter';
+import OffboardingDashboard from './pages/offboarding/OffboardingDashboard';
+import AnalyticsDashboard from './pages/analytics/AnalyticsDashboard';
+
 function App() {
   return (
     <AuthProvider>
@@ -130,6 +142,74 @@ function App() {
                         }
                       />
                       <Route path="/probation/my-status" element={<MyProbation />} />
+
+                      {/* Payroll Management */}
+                      <Route
+                        path="/payroll/*"
+                        element={
+                          <ProtectedRoute requireAdmin>
+                            <PayrollDashboard />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route path="/payroll/my-payslips" element={<PayrollDashboard />} />
+
+                      {/* Recruitment & ATS */}
+                      <Route
+                        path="/recruitment/*"
+                        element={
+                          <ProtectedRoute requireAdmin>
+                            <RecruitmentDashboard />
+                          </ProtectedRoute>
+                        }
+                      />
+
+                      {/* Learning & Development */}
+                      <Route path="/learning/*" element={<LearningDashboard />} />
+
+                      {/* Asset Management */}
+                      <Route
+                        path="/assets/*"
+                        element={
+                          <ProtectedRoute requireAdmin>
+                            <AssetDashboard />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route path="/assets/my-assets" element={<AssetDashboard />} />
+
+                      {/* Expense Management */}
+                      <Route path="/expenses/*" element={<ExpenseDashboard />} />
+
+                      {/* Organization */}
+                      <Route path="/organization/*" element={<OrgChart />} />
+
+                      {/* Document Center */}
+                      <Route path="/documents/*" element={<DocumentCenter />} />
+
+                      {/* Announcements & Events */}
+                      <Route path="/announcements/*" element={<AnnouncementCenter />} />
+
+                      {/* Offboarding */}
+                      <Route
+                        path="/offboarding/*"
+                        element={
+                          <ProtectedRoute requireAdmin>
+                            <OffboardingDashboard />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route path="/offboarding/my-exit" element={<OffboardingDashboard />} />
+
+                      {/* Analytics & Reports */}
+                      <Route
+                        path="/analytics/*"
+                        element={
+                          <ProtectedRoute requireAdmin>
+                            <AnalyticsDashboard />
+                          </ProtectedRoute>
+                        }
+                      />
 
                       {/* Placeholder routes */}
                       <Route path="/crm" element={<Dashboard />} />

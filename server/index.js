@@ -13,6 +13,17 @@ const settingsRoutes = require('./routes/settings');
 const probationsRoutes = require('./routes/probations');
 const appraisalsRoutes = require('./routes/appraisals');
 const performanceRoutes = require('./routes/performance');
+// Extended Enterprise Modules
+const payrollRoutes = require('./routes/payroll');
+const recruitmentRoutes = require('./routes/recruitment');
+const learningRoutes = require('./routes/learning');
+const assetsRoutes = require('./routes/assets');
+const expensesRoutes = require('./routes/expenses');
+const organizationRoutes = require('./routes/organization');
+const documentsRoutes = require('./routes/documents');
+const announcementsRoutes = require('./routes/announcements');
+const offboardingRoutes = require('./routes/offboarding');
+const analyticsRoutes = require('./routes/analytics');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -37,6 +48,17 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/probations', probationsRoutes);
 app.use('/api/appraisals', appraisalsRoutes);
 app.use('/api/performance', performanceRoutes);
+// Extended Enterprise Module Routes
+app.use('/api/payroll', payrollRoutes);
+app.use('/api/recruitment', recruitmentRoutes);
+app.use('/api/learning', learningRoutes);
+app.use('/api/assets', assetsRoutes);
+app.use('/api/expenses', expensesRoutes);
+app.use('/api/organization', organizationRoutes);
+app.use('/api/documents', documentsRoutes);
+app.use('/api/announcements', announcementsRoutes);
+app.use('/api/offboarding', offboardingRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

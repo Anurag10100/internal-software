@@ -17,6 +17,16 @@ import {
   HelpCircle,
   Sparkles,
   Home,
+  DollarSign,
+  UserPlus,
+  BookOpen,
+  Package,
+  Receipt,
+  Building2,
+  FileText,
+  Megaphone,
+  LogOut,
+  BarChart3,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -45,7 +55,7 @@ const navigationSections: NavSection[] = [
   {
     title: 'Overview',
     items: [
-      { name: 'Dashboard', href: '/crm', icon: Home },
+      { name: 'Dashboard', href: '/', icon: Home },
     ],
   },
   {
@@ -113,6 +123,115 @@ const navigationSections: NavSection[] = [
     ],
   },
   {
+    title: 'Finance',
+    items: [
+      {
+        name: 'Payroll',
+        icon: DollarSign,
+        children: [
+          { name: 'Dashboard', href: '/payroll/dashboard', adminOnly: true },
+          { name: 'My Payslips', href: '/payroll/my-payslips' },
+          { name: 'Reimbursements', href: '/payroll/reimbursements' },
+          { name: 'Loans', href: '/payroll/loans', adminOnly: true },
+        ],
+      },
+      {
+        name: 'Expenses',
+        icon: Receipt,
+        children: [
+          { name: 'My Reports', href: '/expenses/my-reports' },
+          { name: 'All Reports', href: '/expenses/all', adminOnly: true },
+          { name: 'Policies', href: '/expenses/policies', adminOnly: true },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'HR Operations',
+    items: [
+      {
+        name: 'Recruitment',
+        icon: UserPlus,
+        adminOnly: true,
+        children: [
+          { name: 'Dashboard', href: '/recruitment/dashboard' },
+          { name: 'Job Postings', href: '/recruitment/jobs' },
+          { name: 'Candidates', href: '/recruitment/candidates' },
+          { name: 'Interviews', href: '/recruitment/interviews' },
+        ],
+      },
+      {
+        name: 'Offboarding',
+        icon: LogOut,
+        children: [
+          { name: 'Dashboard', href: '/offboarding/dashboard', adminOnly: true },
+          { name: 'My Exit', href: '/offboarding/my-exit' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Learning',
+    items: [
+      {
+        name: 'L&D',
+        icon: BookOpen,
+        children: [
+          { name: 'My Learning', href: '/learning/my-courses' },
+          { name: 'Course Catalog', href: '/learning/catalog' },
+          { name: 'Skills', href: '/learning/skills' },
+          { name: 'Certifications', href: '/learning/certifications' },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Resources',
+    items: [
+      {
+        name: 'Assets',
+        icon: Package,
+        children: [
+          { name: 'My Assets', href: '/assets/my-assets' },
+          { name: 'All Assets', href: '/assets/all', adminOnly: true },
+          { name: 'Requests', href: '/assets/requests' },
+        ],
+      },
+      {
+        name: 'Documents',
+        icon: FileText,
+        children: [
+          { name: 'My Documents', href: '/documents/my-documents' },
+          { name: 'Policies', href: '/documents/policies' },
+          { name: 'Templates', href: '/documents/templates', adminOnly: true },
+        ],
+      },
+    ],
+  },
+  {
+    title: 'Company',
+    items: [
+      {
+        name: 'Organization',
+        icon: Building2,
+        children: [
+          { name: 'Org Chart', href: '/organization/chart' },
+          { name: 'Directory', href: '/organization/directory' },
+          { name: 'Departments', href: '/organization/departments', adminOnly: true },
+        ],
+      },
+      {
+        name: 'Announcements',
+        icon: Megaphone,
+        children: [
+          { name: 'News & Updates', href: '/announcements/news' },
+          { name: 'Events', href: '/announcements/events' },
+          { name: 'Celebrations', href: '/announcements/celebrations' },
+        ],
+      },
+    ],
+  },
+  {
     title: 'Admin',
     items: [
       {
@@ -122,6 +241,16 @@ const navigationSections: NavSection[] = [
         children: [
           { name: 'All Employees', href: '/team/employees' },
           { name: 'Departments', href: '/team/departments' },
+        ],
+      },
+      {
+        name: 'Analytics',
+        icon: BarChart3,
+        adminOnly: true,
+        children: [
+          { name: 'HR Overview', href: '/analytics/overview' },
+          { name: 'Reports', href: '/analytics/reports' },
+          { name: 'Audit Logs', href: '/analytics/audit-logs' },
         ],
       },
       { name: 'Settings', href: '/company-settings', icon: Settings, adminOnly: true },
