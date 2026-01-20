@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Target, Award, TrendingUp, AlertCircle } from 'lucide-react';
+import { Target, Award, TrendingUp, AlertCircle, Users, Zap, ArrowUpRight, ArrowDownRight, Sparkles } from 'lucide-react';
 import { KPI, PerformanceDashboardStats } from '../../types';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
@@ -34,13 +34,13 @@ export default function PerformanceDashboard() {
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusConfig = (status: string) => {
     switch (status) {
-      case 'achieved': return 'bg-green-100 text-green-700';
-      case 'on_track': return 'bg-blue-100 text-blue-700';
-      case 'at_risk': return 'bg-yellow-100 text-yellow-700';
-      case 'behind': return 'bg-red-100 text-red-700';
-      default: return 'bg-gray-100 text-gray-700';
+      case 'achieved': return { bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500' };
+      case 'on_track': return { bg: 'bg-blue-100', text: 'text-blue-700', dot: 'bg-blue-500' };
+      case 'at_risk': return { bg: 'bg-amber-100', text: 'text-amber-700', dot: 'bg-amber-500' };
+      case 'behind': return { bg: 'bg-rose-100', text: 'text-rose-700', dot: 'bg-rose-500' };
+      default: return { bg: 'bg-gray-100', text: 'text-gray-700', dot: 'bg-gray-500' };
     }
   };
 
@@ -50,110 +50,172 @@ export default function PerformanceDashboard() {
 
   if (isLoading) {
     return (
-      <div className="p-6">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-          <div className="grid grid-cols-4 gap-4">
+      <div className="p-6 min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+        <div className="animate-pulse space-y-6">
+          <div className="h-10 bg-white/60 rounded-xl w-1/3"></div>
+          <div className="grid grid-cols-4 gap-5">
             {[1, 2, 3, 4].map(i => (
-              <div key={i} className="h-24 bg-gray-200 rounded-xl"></div>
+              <div key={i} className="h-32 bg-white/60 rounded-2xl"></div>
             ))}
           </div>
-          <div className="h-96 bg-gray-200 rounded-xl"></div>
+          <div className="grid grid-cols-2 gap-5">
+            <div className="h-72 bg-white/60 rounded-2xl"></div>
+            <div className="h-72 bg-white/60 rounded-2xl"></div>
+          </div>
         </div>
       </div>
     );
   }
 
+  const totalKpis = stats?.kpis?.total || 0;
+  const achievedPercent = totalKpis > 0 ? Math.round(((stats?.kpis?.achieved || 0) / totalKpis) * 100) : 0;
+
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Performance Dashboard</h1>
-        <p className="text-gray-500 mt-1">Organization-wide performance metrics overview</p>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl p-4 border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <Target className="w-5 h-5 text-blue-600" />
-            </div>
-            <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-              (stats?.kpis?.achieved || 0) > 0 ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-            }`}>
-              {stats?.kpis?.achieved || 0} achieved
-            </span>
+      <div className="mb-8">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="p-2.5 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl shadow-lg shadow-violet-200">
+            <Zap className="w-6 h-6 text-white" />
           </div>
-          <p className="text-2xl font-bold text-gray-900 mt-3">{stats?.kpis?.total || 0}</p>
-          <p className="text-sm text-gray-500">Total KPIs</p>
-        </div>
-
-        <div className="bg-white rounded-xl p-4 border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <TrendingUp className="w-5 h-5 text-green-600" />
-            </div>
-            <span className="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-700">
-              On Track
-            </span>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Performance Dashboard</h1>
+            <p className="text-gray-500">Organization-wide performance metrics overview</p>
           </div>
-          <p className="text-2xl font-bold text-green-600 mt-3">{stats?.kpis?.on_track || 0}</p>
-          <p className="text-sm text-gray-500">KPIs on track</p>
-        </div>
-
-        <div className="bg-white rounded-xl p-4 border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div className="p-2 bg-yellow-100 rounded-lg">
-              <AlertCircle className="w-5 h-5 text-yellow-600" />
-            </div>
-            <span className="text-xs font-medium px-2 py-1 rounded-full bg-yellow-100 text-yellow-700">
-              At Risk
-            </span>
-          </div>
-          <p className="text-2xl font-bold text-yellow-600 mt-3">
-            {(stats?.kpis?.at_risk || 0) + (stats?.kpis?.behind || 0)}
-          </p>
-          <p className="text-sm text-gray-500">Need attention</p>
-        </div>
-
-        <div className="bg-white rounded-xl p-4 border border-gray-200">
-          <div className="flex items-center justify-between">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <Award className="w-5 h-5 text-purple-600" />
-            </div>
-            <span className="text-xs font-medium px-2 py-1 rounded-full bg-purple-100 text-purple-700">
-              This Month
-            </span>
-          </div>
-          <p className="text-2xl font-bold text-purple-600 mt-3">{stats?.recentRecognitions || 0}</p>
-          <p className="text-sm text-gray-500">Recognitions</p>
         </div>
       </div>
 
-      {/* KPIs Overview */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Hero Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        {/* Total KPIs */}
+        <div className="group relative bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-blue-100/50 transition-all duration-300 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-2.5 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-xl shadow-lg shadow-blue-200/50">
+                <Target className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex items-center gap-1 text-emerald-600 text-sm font-medium">
+                <ArrowUpRight className="w-4 h-4" />
+                {achievedPercent}%
+              </div>
+            </div>
+            <p className="text-3xl font-bold text-gray-900 mb-1">{totalKpis}</p>
+            <p className="text-sm text-gray-500">Total KPIs Tracked</p>
+            <div className="mt-3 flex items-center gap-2">
+              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full">
+                {stats?.kpis?.achieved || 0} achieved
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* On Track */}
+        <div className="group relative bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-emerald-100/50 transition-all duration-300 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-green-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-2.5 bg-gradient-to-br from-emerald-500 to-green-500 rounded-xl shadow-lg shadow-emerald-200/50">
+                <TrendingUp className="w-5 h-5 text-white" />
+              </div>
+              <Sparkles className="w-5 h-5 text-emerald-400" />
+            </div>
+            <p className="text-3xl font-bold text-emerald-600 mb-1">{stats?.kpis?.on_track || 0}</p>
+            <p className="text-sm text-gray-500">KPIs On Track</p>
+            <div className="mt-3 h-1.5 bg-emerald-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-emerald-500 to-green-400 rounded-full transition-all duration-1000"
+                style={{ width: `${totalKpis > 0 ? ((stats?.kpis?.on_track || 0) / totalKpis) * 100 : 0}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Need Attention */}
+        <div className="group relative bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-amber-100/50 transition-all duration-300 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 to-orange-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-2.5 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl shadow-lg shadow-amber-200/50">
+                <AlertCircle className="w-5 h-5 text-white" />
+              </div>
+              {((stats?.kpis?.at_risk || 0) + (stats?.kpis?.behind || 0)) > 0 && (
+                <div className="flex items-center gap-1 text-rose-600 text-sm font-medium">
+                  <ArrowDownRight className="w-4 h-4" />
+                  Risk
+                </div>
+              )}
+            </div>
+            <p className="text-3xl font-bold text-amber-600 mb-1">
+              {(stats?.kpis?.at_risk || 0) + (stats?.kpis?.behind || 0)}
+            </p>
+            <p className="text-sm text-gray-500">Need Attention</p>
+            <div className="mt-3 flex gap-2">
+              <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
+                {stats?.kpis?.at_risk || 0} at risk
+              </span>
+              <span className="px-2 py-0.5 bg-rose-100 text-rose-700 text-xs font-medium rounded-full">
+                {stats?.kpis?.behind || 0} behind
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Recognitions */}
+        <div className="group relative bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-xl hover:shadow-violet-100/50 transition-all duration-300 overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative">
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-2.5 bg-gradient-to-br from-violet-500 to-purple-500 rounded-xl shadow-lg shadow-violet-200/50">
+                <Award className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xs font-medium text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full">
+                This Month
+              </span>
+            </div>
+            <p className="text-3xl font-bold text-violet-600 mb-1">{stats?.recentRecognitions || 0}</p>
+            <p className="text-sm text-gray-500">Recognitions Given</p>
+            <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
+              <Users className="w-3.5 h-3.5" />
+              Team appreciations
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Charts Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* KPI Status Distribution */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">KPI Status Distribution</h2>
-          <div className="space-y-4">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-semibold text-gray-900">KPI Status Distribution</h2>
+            <span className="text-xs text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">
+              {totalKpis} total
+            </span>
+          </div>
+          <div className="space-y-5">
             {[
-              { label: 'Achieved', value: stats?.kpis?.achieved || 0, color: 'bg-green-500' },
-              { label: 'On Track', value: stats?.kpis?.on_track || 0, color: 'bg-blue-500' },
-              { label: 'At Risk', value: stats?.kpis?.at_risk || 0, color: 'bg-yellow-500' },
-              { label: 'Behind', value: stats?.kpis?.behind || 0, color: 'bg-red-500' },
+              { label: 'Achieved', value: stats?.kpis?.achieved || 0, gradient: 'from-emerald-500 to-green-400', bg: 'bg-emerald-50' },
+              { label: 'On Track', value: stats?.kpis?.on_track || 0, gradient: 'from-blue-500 to-cyan-400', bg: 'bg-blue-50' },
+              { label: 'At Risk', value: stats?.kpis?.at_risk || 0, gradient: 'from-amber-500 to-orange-400', bg: 'bg-amber-50' },
+              { label: 'Behind', value: stats?.kpis?.behind || 0, gradient: 'from-rose-500 to-red-400', bg: 'bg-rose-50' },
             ].map((item) => {
-              const total = stats?.kpis?.total || 1;
-              const percent = Math.round((item.value / total) * 100);
+              const percent = totalKpis > 0 ? Math.round((item.value / totalKpis) * 100) : 0;
               return (
-                <div key={item.label}>
-                  <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="text-gray-600">{item.label}</span>
-                    <span className="font-medium">{item.value} ({percent}%)</span>
+                <div key={item.label} className="group">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full bg-gradient-to-r ${item.gradient}`} />
+                      <span className="text-sm font-medium text-gray-700">{item.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-gray-900">{item.value}</span>
+                      <span className="text-xs text-gray-400">({percent}%)</span>
+                    </div>
                   </div>
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className={`h-2.5 ${item.bg} rounded-full overflow-hidden`}>
                     <div
-                      className={`h-full ${item.color} rounded-full transition-all`}
+                      className={`h-full bg-gradient-to-r ${item.gradient} rounded-full transition-all duration-700 ease-out group-hover:shadow-lg`}
                       style={{ width: `${percent}%` }}
                     />
                   </div>
@@ -163,83 +225,121 @@ export default function PerformanceDashboard() {
           </div>
         </div>
 
-        {/* Goals Progress */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Goals Progress</h2>
-          <div className="flex items-center justify-center h-48">
-            <div className="text-center">
-              <div className="relative inline-flex">
-                <svg className="w-32 h-32">
-                  <circle
-                    className="text-gray-200"
-                    strokeWidth="10"
-                    stroke="currentColor"
-                    fill="transparent"
-                    r="56"
-                    cx="64"
-                    cy="64"
-                  />
-                  <circle
-                    className="text-primary-600"
-                    strokeWidth="10"
-                    strokeLinecap="round"
-                    stroke="currentColor"
-                    fill="transparent"
-                    r="56"
-                    cx="64"
-                    cy="64"
-                    strokeDasharray={`${(stats?.goals?.avg_progress || 0) * 3.52} 352`}
-                    strokeDashoffset="0"
-                    transform="rotate(-90 64 64)"
-                  />
-                </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-2xl font-bold">
+        {/* Goals Progress Ring */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-lg font-semibold text-gray-900">Goals Progress</h2>
+            <span className="text-xs text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">
+              {stats?.goals?.completed || 0}/{stats?.goals?.total || 0} done
+            </span>
+          </div>
+          <div className="flex items-center justify-center py-4">
+            <div className="relative">
+              {/* Background ring */}
+              <svg className="w-44 h-44 transform -rotate-90">
+                <circle
+                  className="text-gray-100"
+                  strokeWidth="12"
+                  stroke="currentColor"
+                  fill="transparent"
+                  r="70"
+                  cx="88"
+                  cy="88"
+                />
+                {/* Progress ring */}
+                <circle
+                  className="text-primary-500 transition-all duration-1000 ease-out"
+                  strokeWidth="12"
+                  strokeLinecap="round"
+                  stroke="url(#progressGradient)"
+                  fill="transparent"
+                  r="70"
+                  cx="88"
+                  cy="88"
+                  strokeDasharray={`${(stats?.goals?.avg_progress || 0) * 4.4} 440`}
+                />
+                <defs>
+                  <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#8B5CF6" />
+                    <stop offset="100%" stopColor="#06B6D4" />
+                  </linearGradient>
+                </defs>
+              </svg>
+              {/* Center content */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-4xl font-bold bg-gradient-to-r from-violet-600 to-cyan-600 bg-clip-text text-transparent">
                   {Math.round(stats?.goals?.avg_progress || 0)}%
                 </span>
+                <span className="text-sm text-gray-500 mt-1">Avg Progress</span>
               </div>
-              <p className="text-gray-500 mt-2">Average Goal Progress</p>
-              <p className="text-sm text-gray-400">
-                {stats?.goals?.completed || 0} of {stats?.goals?.total || 0} completed
-              </p>
+            </div>
+          </div>
+          <div className="flex justify-center gap-6 mt-4">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-gray-900">{stats?.goals?.total || 0}</p>
+              <p className="text-xs text-gray-500">Total Goals</p>
+            </div>
+            <div className="w-px bg-gray-200" />
+            <div className="text-center">
+              <p className="text-2xl font-bold text-emerald-600">{stats?.goals?.completed || 0}</p>
+              <p className="text-xs text-gray-500">Completed</p>
+            </div>
+            <div className="w-px bg-gray-200" />
+            <div className="text-center">
+              <p className="text-2xl font-bold text-violet-600">{stats?.activePips || 0}</p>
+              <p className="text-xs text-gray-500">Active PIPs</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* All KPIs Table */}
-      <div className="bg-white rounded-xl border border-gray-200">
-        <div className="p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">All KPIs by Employee</h2>
+      {/* KPIs Table */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">All KPIs by Employee</h2>
+            <span className="text-sm text-gray-500">{kpis.length} KPIs</span>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Employee</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">KPI</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Progress</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+            <thead>
+              <tr className="bg-gray-50/50">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Employee</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">KPI</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Progress</th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-gray-100">
               {kpis.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
-                    No KPIs found
+                  <td colSpan={4} className="px-6 py-12 text-center">
+                    <Target className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p className="text-gray-500 font-medium">No KPIs found</p>
+                    <p className="text-sm text-gray-400 mt-1">KPIs will appear here once created</p>
                   </td>
                 </tr>
               ) : (
                 kpis.map((kpi) => {
                   const progress = getProgressPercent(kpi.current_value, kpi.target_value);
+                  const statusConfig = getStatusConfig(kpi.status);
                   return (
-                    <tr key={kpi.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3">
-                        <div>
-                          <p className="font-medium text-gray-900">{kpi.user_name}</p>
-                          <p className="text-sm text-gray-500">{kpi.department}</p>
+                    <tr key={kpi.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-100 to-violet-100 flex items-center justify-center">
+                            <span className="text-sm font-semibold text-primary-700">
+                              {kpi.user_name?.charAt(0) || '?'}
+                            </span>
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">{kpi.user_name}</p>
+                            <p className="text-sm text-gray-500">{kpi.department}</p>
+                          </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-6 py-4">
                         <div>
                           <p className="font-medium text-gray-900">{kpi.title}</p>
                           <p className="text-sm text-gray-500">
@@ -247,25 +347,27 @@ export default function PerformanceDashboard() {
                           </p>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <div className="w-32">
-                          <div className="flex items-center justify-between text-xs mb-1">
-                            <span className="text-gray-500">{progress}%</span>
+                      <td className="px-6 py-4">
+                        <div className="w-36">
+                          <div className="flex items-center justify-between text-xs mb-1.5">
+                            <span className="font-medium text-gray-700">{progress}%</span>
                           </div>
-                          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                             <div
-                              className={`h-full rounded-full ${
-                                kpi.status === 'achieved' ? 'bg-green-500' :
-                                kpi.status === 'on_track' ? 'bg-blue-500' :
-                                kpi.status === 'at_risk' ? 'bg-yellow-500' : 'bg-red-500'
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                kpi.status === 'achieved' ? 'bg-gradient-to-r from-emerald-500 to-green-400' :
+                                kpi.status === 'on_track' ? 'bg-gradient-to-r from-blue-500 to-cyan-400' :
+                                kpi.status === 'at_risk' ? 'bg-gradient-to-r from-amber-500 to-orange-400' :
+                                'bg-gradient-to-r from-rose-500 to-red-400'
                               }`}
                               style={{ width: `${progress}%` }}
                             />
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(kpi.status)}`}>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`} />
                           {kpi.status.replace('_', ' ')}
                         </span>
                       </td>
