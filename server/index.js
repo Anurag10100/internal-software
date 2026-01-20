@@ -10,6 +10,9 @@ const leavesRoutes = require('./routes/leaves');
 const checkinsRoutes = require('./routes/checkins');
 const usersRoutes = require('./routes/users');
 const settingsRoutes = require('./routes/settings');
+const probationsRoutes = require('./routes/probations');
+const appraisalsRoutes = require('./routes/appraisals');
+const performanceRoutes = require('./routes/performance');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -31,6 +34,9 @@ app.use('/api/leaves', leavesRoutes);
 app.use('/api/checkins', checkinsRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/probations', probationsRoutes);
+app.use('/api/appraisals', appraisalsRoutes);
+app.use('/api/performance', performanceRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

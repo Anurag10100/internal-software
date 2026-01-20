@@ -12,6 +12,9 @@ import {
   Shield,
   X,
   Send,
+  Target,
+  ClipboardList,
+  UserCheck,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -55,6 +58,33 @@ const navigation: NavItem[] = [
     ],
   },
   {
+    name: 'Performance',
+    icon: Target,
+    children: [
+      { name: 'Dashboard', href: '/performance/dashboard', adminOnly: true },
+      { name: 'My KPIs', href: '/performance/my-kpis' },
+      { name: 'My Goals', href: '/performance/goals' },
+      { name: 'Recognition', href: '/performance/recognition' },
+    ],
+  },
+  {
+    name: 'Appraisals',
+    icon: ClipboardList,
+    children: [
+      { name: 'My Appraisals', href: '/appraisals/my-appraisals' },
+      { name: 'My Goals', href: '/appraisals/goals' },
+      { name: 'All Appraisals', href: '/appraisals/all', adminOnly: true },
+    ],
+  },
+  {
+    name: 'Probation',
+    icon: UserCheck,
+    children: [
+      { name: 'Dashboard', href: '/probation/dashboard', adminOnly: true },
+      { name: 'My Status', href: '/probation/my-status' },
+    ],
+  },
+  {
     name: 'Team Management',
     icon: Users,
     adminOnly: true,
@@ -70,7 +100,7 @@ export default function Sidebar() {
   const location = useLocation();
   const { isAdmin, user } = useAuth();
   const { success } = useToast();
-  const [expandedItems, setExpandedItems] = useState<string[]>(['Task Delegation', 'HRMS']);
+  const [expandedItems, setExpandedItems] = useState<string[]>(['Task Delegation', 'HRMS', 'Performance', 'Appraisals']);
   const [showBugModal, setShowBugModal] = useState(false);
   const [bugReport, setBugReport] = useState({ title: '', description: '' });
 

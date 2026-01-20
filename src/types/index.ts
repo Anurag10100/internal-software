@@ -129,3 +129,222 @@ export interface LeaderboardEntry {
   score: number;
   status: 'green' | 'yellow' | 'red';
 }
+
+// ==========================================
+// PROBATION MANAGEMENT TYPES
+// ==========================================
+
+export interface Probation {
+  id: string;
+  user_id: string;
+  user_name?: string;
+  user_email?: string;
+  department?: string;
+  designation?: string;
+  start_date: string;
+  end_date: string;
+  duration_days: number;
+  status: 'ongoing' | 'extended' | 'confirmed' | 'terminated';
+  extended_till?: string;
+  extension_reason?: string;
+  confirmed_by?: string;
+  confirmed_by_name?: string;
+  confirmed_at?: string;
+  notes?: string;
+  created_at: string;
+  checklists?: ProbationChecklist[];
+  reviews?: ProbationReview[];
+}
+
+export interface ProbationReview {
+  id: string;
+  probation_id: string;
+  reviewer_id: string;
+  reviewer_name?: string;
+  review_date: string;
+  milestone: string;
+  rating: number;
+  feedback: string;
+  recommendation: 'continue' | 'extend' | 'confirm' | 'terminate';
+  created_at: string;
+}
+
+export interface ProbationChecklist {
+  id: string;
+  probation_id: string;
+  item: string;
+  is_completed: boolean;
+  completed_at?: string;
+  completed_by?: string;
+}
+
+// ==========================================
+// APPRAISAL SYSTEM TYPES
+// ==========================================
+
+export interface AppraisalCycle {
+  id: string;
+  name: string;
+  type: 'annual' | 'semi-annual' | 'quarterly';
+  start_date: string;
+  end_date: string;
+  status: 'draft' | 'active' | 'closed';
+  created_by?: string;
+  created_by_name?: string;
+  created_at: string;
+}
+
+export interface Appraisal {
+  id: string;
+  cycle_id: string;
+  cycle_name?: string;
+  cycle_type?: string;
+  cycle_start?: string;
+  cycle_end?: string;
+  employee_id: string;
+  employee_name?: string;
+  employee_email?: string;
+  department?: string;
+  designation?: string;
+  manager_id: string;
+  manager_name?: string;
+  status: 'pending' | 'self_review' | 'manager_review' | 'completed';
+  self_rating?: number;
+  manager_rating?: number;
+  final_rating?: number;
+  self_comments?: string;
+  manager_comments?: string;
+  submitted_at?: string;
+  reviewed_at?: string;
+  created_at: string;
+  goals?: Goal[];
+  feedback_360?: Feedback360[];
+}
+
+export interface Goal {
+  id: string;
+  user_id: string;
+  user_name?: string;
+  department?: string;
+  appraisal_id?: string;
+  title: string;
+  description?: string;
+  category: 'performance' | 'learning' | 'project';
+  target_date: string;
+  weightage: number;
+  progress: number;
+  status: 'active' | 'completed' | 'cancelled';
+  self_rating?: number;
+  manager_rating?: number;
+  created_at: string;
+}
+
+export interface Feedback360 {
+  id: string;
+  appraisal_id: string;
+  reviewer_id: string;
+  reviewer_name?: string;
+  reviewer_type: 'peer' | 'reportee' | 'cross-team';
+  rating: number;
+  strengths?: string;
+  improvements?: string;
+  comments?: string;
+  is_anonymous: boolean;
+  submitted_at?: string;
+}
+
+// ==========================================
+// PERFORMANCE MANAGEMENT TYPES
+// ==========================================
+
+export interface KPI {
+  id: string;
+  user_id: string;
+  user_name?: string;
+  department?: string;
+  designation?: string;
+  title: string;
+  description?: string;
+  metric_type: 'number' | 'percentage' | 'currency' | 'boolean';
+  target_value: number;
+  current_value: number;
+  unit: string;
+  period: 'monthly' | 'quarterly' | 'annual';
+  status: 'on_track' | 'at_risk' | 'behind' | 'achieved';
+  created_at: string;
+}
+
+export interface PerformanceNote {
+  id: string;
+  user_id: string;
+  user_name?: string;
+  department?: string;
+  author_id: string;
+  author_name?: string;
+  type: 'praise' | 'concern' | 'observation';
+  content: string;
+  is_private: boolean;
+  created_at: string;
+}
+
+export interface PIP {
+  id: string;
+  user_id: string;
+  user_name?: string;
+  user_email?: string;
+  department?: string;
+  designation?: string;
+  manager_id: string;
+  manager_name?: string;
+  start_date: string;
+  end_date: string;
+  reason: string;
+  goals: string[];
+  status: 'active' | 'completed' | 'extended' | 'failed';
+  outcome?: string;
+  created_at: string;
+  checkpoints?: PIPCheckpoint[];
+}
+
+export interface PIPCheckpoint {
+  id: string;
+  pip_id: string;
+  checkpoint_date: string;
+  progress_notes: string;
+  rating: number;
+  reviewed_by?: string;
+  reviewed_by_name?: string;
+  created_at: string;
+}
+
+export interface Recognition {
+  id: string;
+  recipient_id: string;
+  recipient_name?: string;
+  recipient_department?: string;
+  nominator_id: string;
+  nominator_name?: string;
+  type: 'appreciation' | 'award' | 'badge';
+  badge: 'star_performer' | 'team_player' | 'innovator' | 'helping_hand' | 'quick_learner';
+  title: string;
+  message: string;
+  is_public: boolean;
+  created_at: string;
+}
+
+export interface PerformanceDashboardStats {
+  kpis: {
+    total: number;
+    achieved: number;
+    on_track: number;
+    at_risk: number;
+    behind: number;
+  };
+  activePips: number;
+  recentRecognitions: number;
+  goals: {
+    total: number;
+    completed: number;
+    avg_progress: number;
+  };
+}

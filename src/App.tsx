@@ -20,6 +20,19 @@ import Attendance from './pages/hrms/Attendance';
 import Settings from './pages/hrms/Settings';
 import TeamManagement from './pages/team/TeamManagement';
 
+// Performance Management
+import PerformanceDashboard from './pages/performance/PerformanceDashboard';
+import MyKPIs from './pages/performance/MyKPIs';
+import Recognition from './pages/performance/Recognition';
+
+// Appraisals
+import MyAppraisals from './pages/appraisals/MyAppraisals';
+import Goals from './pages/appraisals/Goals';
+
+// Probation
+import ProbationDashboard from './pages/probation/ProbationDashboard';
+import MyProbation from './pages/probation/MyProbation';
+
 function App() {
   return (
     <AuthProvider>
@@ -81,6 +94,42 @@ function App() {
                           </ProtectedRoute>
                         }
                       />
+
+                      {/* Performance Management */}
+                      <Route
+                        path="/performance/dashboard"
+                        element={
+                          <ProtectedRoute requireAdmin>
+                            <PerformanceDashboard />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route path="/performance/my-kpis" element={<MyKPIs />} />
+                      <Route path="/performance/goals" element={<Goals />} />
+                      <Route path="/performance/recognition" element={<Recognition />} />
+
+                      {/* Appraisals */}
+                      <Route path="/appraisals/my-appraisals" element={<MyAppraisals />} />
+                      <Route path="/appraisals/goals" element={<Goals />} />
+                      <Route
+                        path="/appraisals/all"
+                        element={
+                          <ProtectedRoute requireAdmin>
+                            <MyAppraisals />
+                          </ProtectedRoute>
+                        }
+                      />
+
+                      {/* Probation */}
+                      <Route
+                        path="/probation/dashboard"
+                        element={
+                          <ProtectedRoute requireAdmin>
+                            <ProbationDashboard />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route path="/probation/my-status" element={<MyProbation />} />
 
                       {/* Placeholder routes */}
                       <Route path="/crm" element={<Dashboard />} />

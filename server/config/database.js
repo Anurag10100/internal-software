@@ -98,6 +98,227 @@ function initializeDatabase() {
     )
   `);
 
+  // ==========================================
+  // PROBATION MANAGEMENT TABLES
+  // ==========================================
+
+  // Probations table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS probations (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      duration_days INTEGER DEFAULT 90,
+      status TEXT DEFAULT 'ongoing',
+      extended_till TEXT,
+      extension_reason TEXT,
+      confirmed_by TEXT,
+      confirmed_at TEXT,
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (confirmed_by) REFERENCES users(id)
+    )
+  `);
+
+  // Probation reviews table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS probation_reviews (
+      id TEXT PRIMARY KEY,
+      probation_id TEXT NOT NULL,
+      reviewer_id TEXT NOT NULL,
+      review_date TEXT NOT NULL,
+      milestone TEXT,
+      rating INTEGER,
+      feedback TEXT,
+      recommendation TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (probation_id) REFERENCES probations(id),
+      FOREIGN KEY (reviewer_id) REFERENCES users(id)
+    )
+  `);
+
+  // Probation checklists table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS probation_checklists (
+      id TEXT PRIMARY KEY,
+      probation_id TEXT NOT NULL,
+      item TEXT NOT NULL,
+      is_completed INTEGER DEFAULT 0,
+      completed_at TEXT,
+      completed_by TEXT,
+      FOREIGN KEY (probation_id) REFERENCES probations(id)
+    )
+  `);
+
+  // ==========================================
+  // APPRAISAL SYSTEM TABLES
+  // ==========================================
+
+  // Appraisal cycles table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS appraisal_cycles (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      status TEXT DEFAULT 'draft',
+      created_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (created_by) REFERENCES users(id)
+    )
+  `);
+
+  // Appraisals table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS appraisals (
+      id TEXT PRIMARY KEY,
+      cycle_id TEXT NOT NULL,
+      employee_id TEXT NOT NULL,
+      manager_id TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      self_rating REAL,
+      manager_rating REAL,
+      final_rating REAL,
+      self_comments TEXT,
+      manager_comments TEXT,
+      submitted_at TEXT,
+      reviewed_at TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (cycle_id) REFERENCES appraisal_cycles(id),
+      FOREIGN KEY (employee_id) REFERENCES users(id),
+      FOREIGN KEY (manager_id) REFERENCES users(id)
+    )
+  `);
+
+  // Goals table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS goals (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      appraisal_id TEXT,
+      title TEXT NOT NULL,
+      description TEXT,
+      category TEXT,
+      target_date TEXT,
+      weightage INTEGER DEFAULT 0,
+      progress INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'active',
+      self_rating INTEGER,
+      manager_rating INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (appraisal_id) REFERENCES appraisals(id)
+    )
+  `);
+
+  // 360 Feedback table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS feedback_360 (
+      id TEXT PRIMARY KEY,
+      appraisal_id TEXT NOT NULL,
+      reviewer_id TEXT NOT NULL,
+      reviewer_type TEXT,
+      rating INTEGER,
+      strengths TEXT,
+      improvements TEXT,
+      comments TEXT,
+      is_anonymous INTEGER DEFAULT 1,
+      submitted_at TEXT,
+      FOREIGN KEY (appraisal_id) REFERENCES appraisals(id),
+      FOREIGN KEY (reviewer_id) REFERENCES users(id)
+    )
+  `);
+
+  // ==========================================
+  // PERFORMANCE MANAGEMENT TABLES
+  // ==========================================
+
+  // KPIs table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS kpis (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      metric_type TEXT,
+      target_value REAL,
+      current_value REAL DEFAULT 0,
+      unit TEXT,
+      period TEXT,
+      status TEXT DEFAULT 'on_track',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+
+  // Performance notes table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS performance_notes (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      author_id TEXT NOT NULL,
+      type TEXT,
+      content TEXT NOT NULL,
+      is_private INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (author_id) REFERENCES users(id)
+    )
+  `);
+
+  // PIPs table (Performance Improvement Plans)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pips (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      manager_id TEXT NOT NULL,
+      start_date TEXT NOT NULL,
+      end_date TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      goals TEXT,
+      status TEXT DEFAULT 'active',
+      outcome TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (manager_id) REFERENCES users(id)
+    )
+  `);
+
+  // PIP checkpoints table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pip_checkpoints (
+      id TEXT PRIMARY KEY,
+      pip_id TEXT NOT NULL,
+      checkpoint_date TEXT NOT NULL,
+      progress_notes TEXT,
+      rating INTEGER,
+      reviewed_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (pip_id) REFERENCES pips(id),
+      FOREIGN KEY (reviewed_by) REFERENCES users(id)
+    )
+  `);
+
+  // Recognitions table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS recognitions (
+      id TEXT PRIMARY KEY,
+      recipient_id TEXT NOT NULL,
+      nominator_id TEXT NOT NULL,
+      type TEXT,
+      badge TEXT,
+      title TEXT,
+      message TEXT,
+      is_public INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (recipient_id) REFERENCES users(id),
+      FOREIGN KEY (nominator_id) REFERENCES users(id)
+    )
+  `);
+
   // Seed default data if empty
   seedDefaultData();
 }
@@ -197,6 +418,85 @@ function seedDefaultData() {
     });
 
     db.prepare(`INSERT INTO hrms_settings (id, late_time, half_day_time, settings_json) VALUES (1, '10:30 AM', '11:00 AM', ?)`).run(settingsJson);
+
+    // Seed probations for users in probation
+    const insertProbation = db.prepare(`
+      INSERT INTO probations (id, user_id, start_date, end_date, duration_days, status, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    insertProbation.run('prob-1', 'user-4', '2025-11-01', '2026-01-30', 90, 'ongoing', 'New hire - 3D Artist');
+    insertProbation.run('prob-2', 'user-6', '2025-12-01', '2026-02-28', 90, 'ongoing', 'New hire - Copywriter');
+
+    // Seed probation checklists
+    const insertChecklist = db.prepare(`
+      INSERT INTO probation_checklists (id, probation_id, item, is_completed, completed_at)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+
+    insertChecklist.run('pc-1', 'prob-1', 'Complete onboarding documentation', 1, '2025-11-05');
+    insertChecklist.run('pc-2', 'prob-1', 'Set up workstation and tools', 1, '2025-11-03');
+    insertChecklist.run('pc-3', 'prob-1', 'Complete 3D software training', 1, '2025-11-20');
+    insertChecklist.run('pc-4', 'prob-1', 'First project assignment', 0, null);
+    insertChecklist.run('pc-5', 'prob-1', '30-day review', 0, null);
+
+    insertChecklist.run('pc-6', 'prob-2', 'Complete onboarding documentation', 1, '2025-12-05');
+    insertChecklist.run('pc-7', 'prob-2', 'Set up workstation and tools', 1, '2025-12-03');
+    insertChecklist.run('pc-8', 'prob-2', 'Brand guidelines training', 0, null);
+    insertChecklist.run('pc-9', 'prob-2', 'First writing assignment', 0, null);
+
+    // Seed probation reviews
+    const insertReview = db.prepare(`
+      INSERT INTO probation_reviews (id, probation_id, reviewer_id, review_date, milestone, rating, feedback, recommendation)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    insertReview.run('pr-1', 'prob-1', 'admin-1', '2025-12-01', '30-day', 4, 'Good progress on technical skills. Needs to improve communication.', 'continue');
+
+    // Seed goals
+    const insertGoal = db.prepare(`
+      INSERT INTO goals (id, user_id, title, description, category, target_date, weightage, progress, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    insertGoal.run('goal-1', 'user-1', 'Complete API Migration', 'Migrate all legacy APIs to new architecture', 'performance', '2026-03-31', 30, 45, 'active');
+    insertGoal.run('goal-2', 'user-1', 'Learn Cloud Architecture', 'Complete AWS certification', 'learning', '2026-06-30', 20, 20, 'active');
+    insertGoal.run('goal-3', 'user-2', 'Content Quality Score', 'Achieve 95% content quality score', 'performance', '2026-03-31', 40, 80, 'active');
+    insertGoal.run('goal-4', 'user-3', 'Design System Update', 'Update all brand assets to new guidelines', 'project', '2026-02-28', 35, 60, 'active');
+    insertGoal.run('goal-5', 'user-5', 'Code Coverage', 'Achieve 80% unit test coverage', 'performance', '2026-03-31', 25, 35, 'active');
+
+    // Seed KPIs
+    const insertKPI = db.prepare(`
+      INSERT INTO kpis (id, user_id, title, description, metric_type, target_value, current_value, unit, period, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    insertKPI.run('kpi-1', 'user-1', 'Sprint Velocity', 'Story points completed per sprint', 'number', 40, 35, 'points', 'monthly', 'on_track');
+    insertKPI.run('kpi-2', 'user-1', 'Bug Fix Rate', 'Bugs fixed within SLA', 'percentage', 95, 92, '%', 'monthly', 'at_risk');
+    insertKPI.run('kpi-3', 'user-2', 'Content Output', 'Articles published per month', 'number', 8, 6, 'articles', 'monthly', 'on_track');
+    insertKPI.run('kpi-4', 'user-3', 'Design Delivery', 'Designs delivered on time', 'percentage', 100, 100, '%', 'monthly', 'achieved');
+    insertKPI.run('kpi-5', 'user-4', '3D Render Quality', 'Client approval rate', 'percentage', 90, 85, '%', 'monthly', 'on_track');
+    insertKPI.run('kpi-6', 'user-5', 'Code Review Turnaround', 'Reviews completed within 24hrs', 'percentage', 90, 88, '%', 'monthly', 'on_track');
+
+    // Seed performance notes
+    const insertNote = db.prepare(`
+      INSERT INTO performance_notes (id, user_id, author_id, type, content, is_private)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    insertNote.run('note-1', 'user-1', 'admin-1', 'praise', 'Excellent work on the payment integration. Delivered ahead of schedule!', 0);
+    insertNote.run('note-2', 'user-3', 'admin-2', 'praise', 'The event poster designs were outstanding. Client loved them!', 0);
+    insertNote.run('note-3', 'user-2', 'admin-2', 'observation', 'May need additional support on technical writing tasks.', 1);
+
+    // Seed recognitions
+    const insertRecognition = db.prepare(`
+      INSERT INTO recognitions (id, recipient_id, nominator_id, type, badge, title, message, is_public)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    insertRecognition.run('rec-1', 'user-1', 'admin-1', 'award', 'star_performer', 'Star Performer', 'For exceptional work on Q4 projects!', 1);
+    insertRecognition.run('rec-2', 'user-3', 'user-2', 'appreciation', 'team_player', 'Team Player', 'Always helpful and collaborative!', 1);
+    insertRecognition.run('rec-3', 'user-2', 'admin-2', 'appreciation', 'innovator', 'Creative Excellence', 'Brought fresh ideas to content strategy!', 1);
 
     console.log('Default data seeded successfully!');
   }
