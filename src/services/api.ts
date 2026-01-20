@@ -216,6 +216,302 @@ class ApiService {
   async healthCheck() {
     return this.request<{ status: string }>('/health');
   }
+
+  // ==========================================
+  // PROBATION MANAGEMENT
+  // ==========================================
+
+  async getProbations() {
+    return this.request<any[]>('/probations');
+  }
+
+  async getActiveProbations() {
+    return this.request<any[]>('/probations/active');
+  }
+
+  async getMyProbation() {
+    return this.request<any>('/probations/my-probation');
+  }
+
+  async getProbation(id: string) {
+    return this.request<any>(`/probations/${id}`);
+  }
+
+  async createProbation(data: { user_id: string; start_date: string; end_date: string; duration_days?: number; notes?: string }) {
+    return this.request<any>('/probations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateProbation(id: string, data: any) {
+    return this.request<any>(`/probations/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async addProbationReview(probationId: string, data: { milestone: string; rating: number; feedback: string; recommendation: string }) {
+    return this.request<any>(`/probations/${probationId}/reviews`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getProbationReviews(probationId: string) {
+    return this.request<any[]>(`/probations/${probationId}/reviews`);
+  }
+
+  async getProbationChecklist(probationId: string) {
+    return this.request<any[]>(`/probations/${probationId}/checklist`);
+  }
+
+  async updateChecklistItem(probationId: string, checklistId: string, is_completed: boolean) {
+    return this.request<any>(`/probations/${probationId}/checklist/${checklistId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_completed }),
+    });
+  }
+
+  async addChecklistItem(probationId: string, item: string) {
+    return this.request<any>(`/probations/${probationId}/checklist`, {
+      method: 'POST',
+      body: JSON.stringify({ item }),
+    });
+  }
+
+  // ==========================================
+  // APPRAISAL SYSTEM
+  // ==========================================
+
+  // Cycles
+  async getAppraisalCycles() {
+    return this.request<any[]>('/appraisals/cycles');
+  }
+
+  async createAppraisalCycle(data: { name: string; type: string; start_date: string; end_date: string }) {
+    return this.request<any>('/appraisals/cycles', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateAppraisalCycle(id: string, data: any) {
+    return this.request<any>(`/appraisals/cycles/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async activateAppraisalCycle(id: string) {
+    return this.request<any>(`/appraisals/cycles/${id}/activate`, {
+      method: 'POST',
+    });
+  }
+
+  // Appraisals
+  async getAppraisals() {
+    return this.request<any[]>('/appraisals');
+  }
+
+  async getMyAppraisals() {
+    return this.request<any[]>('/appraisals/my-appraisals');
+  }
+
+  async getAppraisalsToReview() {
+    return this.request<any[]>('/appraisals/to-review');
+  }
+
+  async getAppraisal(id: string) {
+    return this.request<any>(`/appraisals/${id}`);
+  }
+
+  async submitSelfReview(appraisalId: string, data: { self_rating: number; self_comments: string }) {
+    return this.request<any>(`/appraisals/${appraisalId}/self-review`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async submitManagerReview(appraisalId: string, data: { manager_rating: number; manager_comments: string; final_rating: number }) {
+    return this.request<any>(`/appraisals/${appraisalId}/manager-review`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Goals
+  async getAllGoals() {
+    return this.request<any[]>('/appraisals/goals/all');
+  }
+
+  async getMyGoals() {
+    return this.request<any[]>('/appraisals/goals/my-goals');
+  }
+
+  async createGoal(data: { user_id?: string; appraisal_id?: string; title: string; description?: string; category: string; target_date: string; weightage?: number }) {
+    return this.request<any>('/appraisals/goals', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateGoal(id: string, data: any) {
+    return this.request<any>(`/appraisals/goals/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteGoal(id: string) {
+    return this.request<{ message: string }>(`/appraisals/goals/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // 360 Feedback
+  async getAppraisalFeedback(appraisalId: string) {
+    return this.request<any[]>(`/appraisals/${appraisalId}/feedback`);
+  }
+
+  async submitFeedback360(appraisalId: string, data: { reviewer_type: string; rating: number; strengths?: string; improvements?: string; comments?: string; is_anonymous?: boolean }) {
+    return this.request<any>(`/appraisals/${appraisalId}/feedback`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // ==========================================
+  // PERFORMANCE MANAGEMENT
+  // ==========================================
+
+  // KPIs
+  async getAllKPIs() {
+    return this.request<any[]>('/performance/kpis');
+  }
+
+  async getMyKPIs() {
+    return this.request<any[]>('/performance/kpis/my-kpis');
+  }
+
+  async getUserKPIs(userId: string) {
+    return this.request<any[]>(`/performance/kpis/user/${userId}`);
+  }
+
+  async createKPI(data: { user_id: string; title: string; description?: string; metric_type: string; target_value: number; unit: string; period: string }) {
+    return this.request<any>('/performance/kpis', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateKPI(id: string, data: any) {
+    return this.request<any>(`/performance/kpis/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteKPI(id: string) {
+    return this.request<{ message: string }>(`/performance/kpis/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Performance Notes
+  async getAllNotes() {
+    return this.request<any[]>('/performance/notes');
+  }
+
+  async getNotesForUser(userId: string) {
+    return this.request<any[]>(`/performance/notes/for/${userId}`);
+  }
+
+  async getMyNotes() {
+    return this.request<any[]>('/performance/notes/my-notes');
+  }
+
+  async createNote(data: { user_id: string; type: string; content: string; is_private?: boolean }) {
+    return this.request<any>('/performance/notes', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteNote(id: string) {
+    return this.request<{ message: string }>(`/performance/notes/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // PIPs
+  async getAllPIPs() {
+    return this.request<any[]>('/performance/pips');
+  }
+
+  async getActivePIPs() {
+    return this.request<any[]>('/performance/pips/active');
+  }
+
+  async getMyPIP() {
+    return this.request<any>('/performance/pips/my-pip');
+  }
+
+  async getPIP(id: string) {
+    return this.request<any>(`/performance/pips/${id}`);
+  }
+
+  async createPIP(data: { user_id: string; start_date: string; end_date: string; reason: string; goals?: string[] }) {
+    return this.request<any>('/performance/pips', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updatePIP(id: string, data: any) {
+    return this.request<any>(`/performance/pips/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async addPIPCheckpoint(pipId: string, data: { checkpoint_date: string; progress_notes: string; rating: number }) {
+    return this.request<any>(`/performance/pips/${pipId}/checkpoints`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getPIPCheckpoints(pipId: string) {
+    return this.request<any[]>(`/performance/pips/${pipId}/checkpoints`);
+  }
+
+  // Recognitions
+  async getAllRecognitions() {
+    return this.request<any[]>('/performance/recognitions');
+  }
+
+  async getMyRecognitions() {
+    return this.request<any[]>('/performance/recognitions/my-recognitions');
+  }
+
+  async createRecognition(data: { recipient_id: string; type: string; badge: string; title: string; message: string; is_public?: boolean }) {
+    return this.request<any>('/performance/recognitions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteRecognition(id: string) {
+    return this.request<{ message: string }>(`/performance/recognitions/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // Performance Dashboard
+  async getPerformanceDashboard() {
+    return this.request<any>('/performance/dashboard');
+  }
 }
 
 export const api = new ApiService();
