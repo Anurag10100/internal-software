@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
-  Star,
   ListTodo,
   Users,
   ChevronDown,
-  ChevronRight,
+  ChevronLeft,
   Settings,
   Briefcase,
   Bug,
@@ -15,6 +14,9 @@ import {
   Target,
   ClipboardList,
   UserCheck,
+  HelpCircle,
+  Sparkles,
+  Home,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
@@ -31,76 +33,108 @@ interface NavItem {
   icon: React.ElementType;
   children?: NavChild[];
   adminOnly?: boolean;
+  badge?: string | number;
 }
 
-const navigation: NavItem[] = [
-  { name: 'CRM', href: '/crm', icon: Star },
+interface NavSection {
+  title: string;
+  items: NavItem[];
+}
+
+const navigationSections: NavSection[] = [
   {
-    name: 'Task Delegation',
-    icon: ListTodo,
-    children: [
-      { name: 'My Tasks', href: '/tasks/my-tasks' },
-      { name: 'Delegated Tasks', href: '/tasks/delegated' },
-      { name: 'Team Tasks', href: '/tasks/team', adminOnly: true },
-      { name: 'A.C.E. Meeting', href: '/tasks/ace-meeting', adminOnly: true },
+    title: 'Overview',
+    items: [
+      { name: 'Dashboard', href: '/crm', icon: Home },
     ],
   },
   {
-    name: 'HRMS',
-    icon: Briefcase,
-    children: [
-      { name: 'My Leaves', href: '/hrms/my-leaves' },
-      { name: 'All Leaves', href: '/hrms/all-leaves', adminOnly: true },
-      { name: 'Check-ins', href: '/hrms/check-ins' },
-      { name: 'Team Check-in', href: '/hrms/team-check-ins', adminOnly: true },
-      { name: 'Attendance', href: '/hrms/attendance', adminOnly: true },
-      { name: 'Settings', href: '/hrms/settings', adminOnly: true },
+    title: 'Work',
+    items: [
+      {
+        name: 'Tasks',
+        icon: ListTodo,
+        children: [
+          { name: 'My Tasks', href: '/tasks/my-tasks' },
+          { name: 'Delegated', href: '/tasks/delegated' },
+          { name: 'Team Tasks', href: '/tasks/team', adminOnly: true },
+          { name: 'A.C.E. Meeting', href: '/tasks/ace-meeting', adminOnly: true },
+        ],
+      },
     ],
   },
   {
-    name: 'Performance',
-    icon: Target,
-    children: [
-      { name: 'Dashboard', href: '/performance/dashboard', adminOnly: true },
-      { name: 'My KPIs', href: '/performance/my-kpis' },
-      { name: 'My Goals', href: '/performance/goals' },
-      { name: 'Recognition', href: '/performance/recognition' },
+    title: 'Attendance',
+    items: [
+      {
+        name: 'HRMS',
+        icon: Briefcase,
+        children: [
+          { name: 'My Leaves', href: '/hrms/my-leaves' },
+          { name: 'All Leaves', href: '/hrms/all-leaves', adminOnly: true },
+          { name: 'Check-ins', href: '/hrms/check-ins' },
+          { name: 'Team Check-in', href: '/hrms/team-check-ins', adminOnly: true },
+          { name: 'Attendance', href: '/hrms/attendance', adminOnly: true },
+          { name: 'Settings', href: '/hrms/settings', adminOnly: true },
+        ],
+      },
     ],
   },
   {
-    name: 'Appraisals',
-    icon: ClipboardList,
-    children: [
-      { name: 'My Appraisals', href: '/appraisals/my-appraisals' },
-      { name: 'My Goals', href: '/appraisals/goals' },
-      { name: 'All Appraisals', href: '/appraisals/all', adminOnly: true },
+    title: 'Performance',
+    items: [
+      {
+        name: 'Performance',
+        icon: Target,
+        children: [
+          { name: 'Dashboard', href: '/performance/dashboard', adminOnly: true },
+          { name: 'My KPIs', href: '/performance/my-kpis' },
+          { name: 'My Goals', href: '/performance/goals' },
+          { name: 'Recognition', href: '/performance/recognition' },
+        ],
+      },
+      {
+        name: 'Appraisals',
+        icon: ClipboardList,
+        children: [
+          { name: 'My Appraisals', href: '/appraisals/my-appraisals' },
+          { name: 'My Goals', href: '/appraisals/goals' },
+          { name: 'All Appraisals', href: '/appraisals/all', adminOnly: true },
+        ],
+      },
+      {
+        name: 'Probation',
+        icon: UserCheck,
+        children: [
+          { name: 'Dashboard', href: '/probation/dashboard', adminOnly: true },
+          { name: 'My Status', href: '/probation/my-status' },
+        ],
+      },
     ],
   },
   {
-    name: 'Probation',
-    icon: UserCheck,
-    children: [
-      { name: 'Dashboard', href: '/probation/dashboard', adminOnly: true },
-      { name: 'My Status', href: '/probation/my-status' },
+    title: 'Admin',
+    items: [
+      {
+        name: 'Team',
+        icon: Users,
+        adminOnly: true,
+        children: [
+          { name: 'All Employees', href: '/team/employees' },
+          { name: 'Departments', href: '/team/departments' },
+        ],
+      },
+      { name: 'Settings', href: '/company-settings', icon: Settings, adminOnly: true },
     ],
   },
-  {
-    name: 'Team Management',
-    icon: Users,
-    adminOnly: true,
-    children: [
-      { name: 'All Employees', href: '/team/employees' },
-      { name: 'Departments', href: '/team/departments' },
-    ],
-  },
-  { name: 'Company Settings', href: '/company-settings', icon: Settings, adminOnly: true },
 ];
 
 export default function Sidebar() {
   const location = useLocation();
   const { isAdmin, user } = useAuth();
   const { success } = useToast();
-  const [expandedItems, setExpandedItems] = useState<string[]>(['Task Delegation', 'HRMS', 'Performance', 'Appraisals']);
+  const [collapsed, setCollapsed] = useState(false);
+  const [expandedItems, setExpandedItems] = useState<string[]>(['Tasks', 'HRMS', 'Performance', 'Appraisals']);
   const [showBugModal, setShowBugModal] = useState(false);
   const [bugReport, setBugReport] = useState({ title: '', description: '' });
 
@@ -111,16 +145,8 @@ export default function Sidebar() {
   };
 
   const isActive = (href: string) => location.pathname === href;
-  const isParentActive = (children: NavChild[]) =>
-    children.some((child) => location.pathname === child.href);
-
-  // Filter navigation based on role
-  const filteredNavigation = navigation
-    .filter(item => !item.adminOnly || isAdmin)
-    .map(item => ({
-      ...item,
-      children: item.children?.filter(child => !child.adminOnly || isAdmin),
-    }));
+  const isParentActive = (children?: NavChild[]) =>
+    children?.some((child) => location.pathname === child.href) || false;
 
   const handleSubmitBugReport = () => {
     if (bugReport.title && bugReport.description) {
@@ -130,201 +156,288 @@ export default function Sidebar() {
     }
   };
 
+  // Filter navigation based on role
+  const filterItems = (items: NavItem[]) => {
+    return items
+      .filter(item => !item.adminOnly || isAdmin)
+      .map(item => ({
+        ...item,
+        children: item.children?.filter(child => !child.adminOnly || isAdmin),
+      }));
+  };
+
   return (
-    <div className="flex flex-col h-full bg-white border-r border-gray-200 w-64">
+    <aside
+      className={`relative flex flex-col h-full bg-white border-r border-gray-200 transition-all duration-300 ease-out ${
+        collapsed ? 'w-[72px]' : 'w-64'
+      }`}
+    >
+      {/* Collapse Toggle */}
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        className="absolute -right-3 top-20 z-10 w-6 h-6 bg-white border border-gray-200 rounded-full flex items-center justify-center shadow-sm hover:bg-gray-50 hover:shadow transition-all"
+      >
+        <ChevronLeft
+          className={`w-4 h-4 text-gray-500 transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`}
+        />
+      </button>
+
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-4 border-b border-gray-200">
-        <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center shadow-lg shadow-primary-200">
-          <span className="text-white font-bold text-lg">W</span>
+      <div className={`flex items-center gap-3 px-4 h-16 border-b border-gray-100 ${collapsed ? 'justify-center' : ''}`}>
+        <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl flex items-center justify-center shadow-lg shadow-primary-200/50 flex-shrink-0">
+          <Sparkles className="w-5 h-5 text-white" />
         </div>
-        <div>
-          <h1 className="font-semibold text-gray-900">WOW Events</h1>
-          <p className="text-xs text-gray-500">Company Portal</p>
-        </div>
+        {!collapsed && (
+          <div className="overflow-hidden">
+            <h1 className="font-bold text-gray-900 truncate">HRMS Portal</h1>
+            <p className="text-xs text-gray-500 truncate">Company Workspace</p>
+          </div>
+        )}
       </div>
 
-      {/* User Role Badge */}
-      {user && (
-        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50">
-          <div className="flex items-center gap-2">
+      {/* User Card */}
+      {user && !collapsed && (
+        <div className="mx-3 mt-4 p-3 bg-gradient-to-br from-gray-50 to-gray-100/50 rounded-xl border border-gray-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-violet-600 flex items-center justify-center text-white font-semibold text-sm shadow-md">
+              {user.name?.charAt(0) || 'U'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900 truncate">{user.name}</p>
+              <p className="text-xs text-gray-500 truncate">{user.department}</p>
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
             {isAdmin ? (
-              <span className="flex items-center gap-1.5 px-2.5 py-1 bg-purple-100 text-purple-700 rounded-lg text-xs font-medium">
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-violet-100 text-violet-700 rounded-md text-xs font-medium">
                 <Shield className="w-3 h-3" />
-                Admin Access
+                Admin
               </span>
             ) : (
-              <span className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium">
-                Employee Access
+              <span className="px-2 py-1 bg-primary-100 text-primary-700 rounded-md text-xs font-medium">
+                Employee
               </span>
             )}
           </div>
-          <p className="text-xs text-gray-500 mt-1.5">{user.department} Department</p>
+        </div>
+      )}
+
+      {/* Collapsed User Avatar */}
+      {user && collapsed && (
+        <div className="flex justify-center mt-4">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-violet-600 flex items-center justify-center text-white font-semibold text-sm shadow-md">
+            {user.name?.charAt(0) || 'U'}
+          </div>
         </div>
       )}
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4">
-        <ul className="space-y-1 px-2">
-          {filteredNavigation.map((item) => (
-            <li key={item.name}>
-              {item.children && item.children.length > 0 ? (
-                <div>
-                  <button
-                    onClick={() => toggleExpand(item.name)}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
-                      isParentActive(item.children)
-                        ? 'bg-primary-50 text-primary-700'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <item.icon className="w-5 h-5" />
-                      <span>{item.name}</span>
-                    </div>
-                    {expandedItems.includes(item.name) ? (
-                      <ChevronDown className="w-4 h-4" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4" />
-                    )}
-                  </button>
-                  {expandedItems.includes(item.name) && (
-                    <ul className="mt-1 ml-8 space-y-0.5">
-                      {item.children.map((child) => (
-                        <li key={child.name}>
-                          <Link
-                            to={child.href}
-                            className={`block px-3 py-2 text-sm rounded-lg transition-colors ${
-                              isActive(child.href)
-                                ? 'bg-primary-500 text-white shadow-md shadow-primary-200'
-                                : 'text-gray-600 hover:bg-gray-100'
-                            }`}
-                          >
-                            {child.name}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ) : item.href ? (
-                <Link
-                  to={item.href}
-                  className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
-                    isActive(item.href)
-                      ? 'bg-primary-50 text-primary-700'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <item.icon className="w-5 h-5" />
-                  <span>{item.name}</span>
-                </Link>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+      <nav className="flex-1 overflow-y-auto py-4 scrollbar-thin">
+        {navigationSections.map((section, sectionIndex) => {
+          const filteredItems = filterItems(section.items);
+          if (filteredItems.length === 0) return null;
 
-        {/* Admin Section - Only show for admins */}
-        {isAdmin && (
-          <div className="mt-6 px-4">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-              Admin
-            </p>
-            <ul className="space-y-1 px-2">
-              <li>
-                <Link
-                  to="/team/management"
-                  className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
-                    isActive('/team/management')
-                      ? 'bg-primary-50 text-primary-700'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <Users className="w-5 h-5" />
-                  <span>Team Management</span>
-                </Link>
-              </li>
-              <li>
-                <Link
-                  to="/company-settings"
-                  className={`flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-colors ${
-                    isActive('/company-settings')
-                      ? 'bg-primary-50 text-primary-700'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <Settings className="w-5 h-5" />
-                  <span>Company Settings</span>
-                </Link>
-              </li>
-            </ul>
-          </div>
-        )}
+          // Skip Admin section for non-admins
+          if (section.title === 'Admin' && !isAdmin) return null;
+
+          return (
+            <div key={section.title} className={sectionIndex > 0 ? 'mt-6' : ''}>
+              {/* Section Label */}
+              {!collapsed && (
+                <div className="px-4 mb-2">
+                  <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                    {section.title}
+                  </p>
+                </div>
+              )}
+
+              {/* Section Items */}
+              <ul className="space-y-1 px-2">
+                {filteredItems.map((item) => (
+                  <li key={item.name}>
+                    {item.children && item.children.length > 0 ? (
+                      <div>
+                        {/* Parent Item with Children */}
+                        <button
+                          onClick={() => toggleExpand(item.name)}
+                          className={`group relative w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-150 ${
+                            isParentActive(item.children)
+                              ? 'bg-primary-50 text-primary-700'
+                              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                          } ${collapsed ? 'justify-center' : ''}`}
+                        >
+                          <item.icon className={`w-5 h-5 flex-shrink-0 transition-colors ${
+                            isParentActive(item.children) ? 'text-primary-600' : 'text-gray-400 group-hover:text-gray-600'
+                          }`} />
+                          {!collapsed && (
+                            <>
+                              <span className="flex-1 text-left">{item.name}</span>
+                              <ChevronDown
+                                className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                                  expandedItems.includes(item.name) ? 'rotate-0' : '-rotate-90'
+                                }`}
+                              />
+                            </>
+                          )}
+
+                          {/* Tooltip for collapsed state */}
+                          {collapsed && (
+                            <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs font-medium rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 shadow-lg">
+                              {item.name}
+                            </div>
+                          )}
+                        </button>
+
+                        {/* Children */}
+                        {!collapsed && expandedItems.includes(item.name) && (
+                          <ul className="mt-1 ml-4 pl-4 border-l-2 border-gray-100 space-y-0.5">
+                            {item.children.map((child) => (
+                              <li key={child.name}>
+                                <Link
+                                  to={child.href}
+                                  className={`block px-3 py-2 text-sm rounded-lg transition-all duration-150 ${
+                                    isActive(child.href)
+                                      ? 'bg-primary-500 text-white font-medium shadow-md shadow-primary-200'
+                                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                                  }`}
+                                >
+                                  {child.name}
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ) : item.href ? (
+                      <Link
+                        to={item.href}
+                        className={`group relative flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-150 ${
+                          isActive(item.href)
+                            ? 'bg-primary-50 text-primary-700'
+                            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                        } ${collapsed ? 'justify-center' : ''}`}
+                      >
+                        <item.icon className={`w-5 h-5 flex-shrink-0 transition-colors ${
+                          isActive(item.href) ? 'text-primary-600' : 'text-gray-400 group-hover:text-gray-600'
+                        }`} />
+                        {!collapsed && <span>{item.name}</span>}
+
+                        {/* Tooltip for collapsed state */}
+                        {collapsed && (
+                          <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs font-medium rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 shadow-lg">
+                            {item.name}
+                          </div>
+                        )}
+
+                        {/* Badge */}
+                        {item.badge && !collapsed && (
+                          <span className="ml-auto px-2 py-0.5 bg-primary-100 text-primary-700 text-xs font-medium rounded-full">
+                            {item.badge}
+                          </span>
+                        )}
+                      </Link>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
       </nav>
 
-      {/* Report Bug */}
-      <div className="p-4 border-t border-gray-200">
+      {/* Footer */}
+      <div className={`border-t border-gray-100 p-3 space-y-1 ${collapsed ? 'px-2' : ''}`}>
         <button
           onClick={() => setShowBugModal(true)}
-          className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+          className={`group relative flex items-center gap-3 w-full px-3 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 rounded-xl transition-all ${collapsed ? 'justify-center' : ''}`}
         >
-          <Bug className="w-4 h-4" />
-          <span>Report Bug</span>
+          <Bug className="w-5 h-5 text-gray-400 group-hover:text-gray-600" />
+          {!collapsed && <span>Report Bug</span>}
+          {collapsed && (
+            <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs font-medium rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 shadow-lg">
+              Report Bug
+            </div>
+          )}
+        </button>
+
+        <button
+          className={`group relative flex items-center gap-3 w-full px-3 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 rounded-xl transition-all ${collapsed ? 'justify-center' : ''}`}
+        >
+          <HelpCircle className="w-5 h-5 text-gray-400 group-hover:text-gray-600" />
+          {!collapsed && <span>Help & Support</span>}
+          {collapsed && (
+            <div className="absolute left-full ml-2 px-2 py-1 bg-gray-900 text-white text-xs font-medium rounded-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all whitespace-nowrap z-50 shadow-lg">
+              Help & Support
+            </div>
+          )}
         </button>
       </div>
 
       {/* Bug Report Modal */}
       {showBugModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
-            <div className="flex items-center justify-between p-6 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <Bug className="w-5 h-5 text-red-500" />
-                <h2 className="text-xl font-semibold text-gray-900">Report a Bug</h2>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl animate-scale-in">
+            {/* Modal Header */}
+            <div className="relative p-6 pb-4">
+              <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-br from-red-500 to-orange-500 rounded-t-2xl" />
+              <div className="relative flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-white/20 backdrop-blur-sm rounded-xl">
+                    <Bug className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-white">Report a Bug</h2>
+                    <p className="text-red-100 text-sm">Help us improve</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowBugModal(false)}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-white" />
+                </button>
               </div>
-              <button
-                onClick={() => setShowBugModal(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
             </div>
-            <div className="p-6 space-y-4">
+
+            <div className="p-6 pt-2 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Bug Title</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Bug Title</label>
                 <input
                   type="text"
                   value={bugReport.title}
                   onChange={(e) => setBugReport({ ...bugReport, title: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  className="input"
                   placeholder="Brief description of the issue"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Description</label>
                 <textarea
                   value={bugReport.description}
                   onChange={(e) => setBugReport({ ...bugReport, description: e.target.value })}
                   rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+                  className="input resize-none"
                   placeholder="Please describe the bug in detail. Include steps to reproduce if possible."
                 />
               </div>
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-xs text-gray-500">
-                  Your report will be sent to the development team along with your user info ({user?.email}).
+              <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                <p className="text-sm text-gray-600">
+                  Your report will be sent to the development team along with your user info.
                 </p>
+                <p className="text-xs text-gray-400 mt-1">{user?.email}</p>
               </div>
             </div>
-            <div className="flex gap-3 p-6 border-t border-gray-100">
+
+            <div className="flex gap-3 p-6 pt-2">
               <button
                 onClick={() => setShowBugModal(false)}
-                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                className="btn btn-secondary flex-1"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSubmitBugReport}
-                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 text-white bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
+                className="btn btn-primary flex-1"
               >
                 <Send className="w-4 h-4" />
                 Submit Report
@@ -333,6 +446,6 @@ export default function Sidebar() {
           </div>
         </div>
       )}
-    </div>
+    </aside>
   );
 }
