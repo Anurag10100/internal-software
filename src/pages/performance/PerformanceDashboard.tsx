@@ -1,14 +1,23 @@
 import { useState, useEffect } from 'react';
-import { Target, Award, TrendingUp, AlertCircle, Users, Zap, ArrowUpRight, ArrowDownRight, Sparkles } from 'lucide-react';
-import { KPI, PerformanceDashboardStats } from '../../types';
+import { Target, Award, TrendingUp, AlertCircle, Users, Zap, ArrowUpRight, ArrowDownRight, Sparkles, Plus, Trash2, AlertTriangle, FileText } from 'lucide-react';
+import { KPI, PIP, PerformanceDashboardStats, PerformanceNote } from '../../types';
 import api from '../../services/api';
 import { useToast } from '../../context/ToastContext';
+import CreateKPIModal from '../../components/modals/CreateKPIModal';
+import CreatePIPModal from '../../components/modals/CreatePIPModal';
+import CreateNoteModal from '../../components/modals/CreateNoteModal';
 
 export default function PerformanceDashboard() {
   const [stats, setStats] = useState<PerformanceDashboardStats | null>(null);
   const [kpis, setKpis] = useState<KPI[]>([]);
+  const [pips, setPips] = useState<PIP[]>([]);
+  const [notes, setNotes] = useState<PerformanceNote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { error: showError } = useToast();
+  const [showCreateKPIModal, setShowCreateKPIModal] = useState(false);
+  const [showCreatePIPModal, setShowCreatePIPModal] = useState(false);
+  const [showCreateNoteModal, setShowCreateNoteModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'kpis' | 'pips' | 'notes'>('kpis');
+  const { success, error: showError } = useToast();
 
   useEffect(() => {
     loadData();
@@ -16,9 +25,11 @@ export default function PerformanceDashboard() {
 
   const loadData = async () => {
     try {
-      const [dashboardRes, kpisRes] = await Promise.all([
+      const [dashboardRes, kpisRes, pipsRes, notesRes] = await Promise.all([
         api.getPerformanceDashboard(),
         api.getAllKPIs(),
+        api.getAllPIPs(),
+        api.getAllNotes(),
       ]);
 
       if (dashboardRes.data) {
@@ -27,10 +38,47 @@ export default function PerformanceDashboard() {
       if (kpisRes.data) {
         setKpis(kpisRes.data);
       }
+      if (pipsRes.data) {
+        setPips(pipsRes.data);
+      }
+      if (notesRes.data) {
+        setNotes(notesRes.data);
+      }
     } catch (err) {
       showError('Error', 'Failed to load dashboard data');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDeleteKPI = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this KPI?')) return;
+    try {
+      const { error } = await api.deleteKPI(id);
+      if (!error) {
+        setKpis(prev => prev.filter(k => k.id !== id));
+        success('KPI Deleted', 'KPI has been removed');
+        loadData();
+      } else {
+        showError('Error', error);
+      }
+    } catch (err) {
+      showError('Error', 'Failed to delete KPI');
+    }
+  };
+
+  const handleUpdatePIPStatus = async (id: string, status: string, outcome?: string) => {
+    try {
+      const { data, error } = await api.updatePIP(id, { status, outcome });
+      if (data) {
+        setPips(prev => prev.map(p => p.id === id ? { ...p, status: status as any, outcome } : p));
+        success('PIP Updated', 'Status has been updated');
+        loadData();
+      } else if (error) {
+        showError('Error', error);
+      }
+    } catch (err) {
+      showError('Error', 'Failed to update PIP');
     }
   };
 
@@ -73,8 +121,8 @@ export default function PerformanceDashboard() {
   return (
     <div className="p-6 min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-3">
           <div className="p-2.5 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl shadow-lg shadow-violet-200">
             <Zap className="w-6 h-6 text-white" />
           </div>
@@ -82,6 +130,29 @@ export default function PerformanceDashboard() {
             <h1 className="text-2xl font-bold text-gray-900">Performance Dashboard</h1>
             <p className="text-gray-500">Organization-wide performance metrics overview</p>
           </div>
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setShowCreateNoteModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-violet-500 to-purple-600 text-white rounded-xl hover:shadow-lg hover:shadow-violet-200 transition-all duration-300 font-medium"
+          >
+            <FileText className="w-4 h-4" />
+            Add Note
+          </button>
+          <button
+            onClick={() => setShowCreatePIPModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-xl hover:shadow-lg hover:shadow-amber-200 transition-all duration-300 font-medium"
+          >
+            <AlertTriangle className="w-4 h-4" />
+            Create PIP
+          </button>
+          <button
+            onClick={() => setShowCreateKPIModal(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-500 to-cyan-600 text-white rounded-xl hover:shadow-lg hover:shadow-blue-200 transition-all duration-300 font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            Create KPI
+          </button>
         </div>
       </div>
 
@@ -293,92 +364,309 @@ export default function PerformanceDashboard() {
         </div>
       </div>
 
-      {/* KPIs Table */}
+      {/* Tabs */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900">All KPIs by Employee</h2>
-            <span className="text-sm text-gray-500">{kpis.length} KPIs</span>
+            <div className="flex gap-1 bg-gray-100 p-1 rounded-xl">
+              <button
+                onClick={() => setActiveTab('kpis')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  activeTab === 'kpis'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <Target className="w-4 h-4" />
+                KPIs ({kpis.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('pips')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  activeTab === 'pips'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <AlertTriangle className="w-4 h-4" />
+                PIPs ({pips.length})
+              </button>
+              <button
+                onClick={() => setActiveTab('notes')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  activeTab === 'notes'
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                Notes ({notes.length})
+              </button>
+            </div>
           </div>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50/50">
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Employee</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">KPI</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Progress</th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {kpis.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center">
-                    <Target className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                    <p className="text-gray-500 font-medium">No KPIs found</p>
-                    <p className="text-sm text-gray-400 mt-1">KPIs will appear here once created</p>
-                  </td>
+        {/* KPIs Tab */}
+        {activeTab === 'kpis' && (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50/50">
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Employee</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">KPI</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Progress</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
-              ) : (
-                kpis.map((kpi) => {
-                  const progress = getProgressPercent(kpi.current_value, kpi.target_value);
-                  const statusConfig = getStatusConfig(kpi.status);
-                  return (
-                    <tr key={kpi.id} className="hover:bg-gray-50/50 transition-colors">
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {kpis.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center">
+                      <Target className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                      <p className="text-gray-500 font-medium">No KPIs found</p>
+                      <p className="text-sm text-gray-400 mt-1">Click "Create KPI" to add one</p>
+                    </td>
+                  </tr>
+                ) : (
+                  kpis.map((kpi) => {
+                    const progress = getProgressPercent(kpi.current_value, kpi.target_value);
+                    const statusConfig = getStatusConfig(kpi.status);
+                    return (
+                      <tr key={kpi.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-100 to-violet-100 flex items-center justify-center">
+                              <span className="text-sm font-semibold text-primary-700">
+                                {kpi.user_name?.charAt(0) || '?'}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="font-medium text-gray-900">{kpi.user_name}</p>
+                              <p className="text-sm text-gray-500">{kpi.department}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div>
+                            <p className="font-medium text-gray-900">{kpi.title}</p>
+                            <p className="text-sm text-gray-500">
+                              {kpi.current_value} / {kpi.target_value} {kpi.unit}
+                            </p>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="w-36">
+                            <div className="flex items-center justify-between text-xs mb-1.5">
+                              <span className="font-medium text-gray-700">{progress}%</span>
+                            </div>
+                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  kpi.status === 'achieved' ? 'bg-gradient-to-r from-emerald-500 to-green-400' :
+                                  kpi.status === 'on_track' ? 'bg-gradient-to-r from-blue-500 to-cyan-400' :
+                                  kpi.status === 'at_risk' ? 'bg-gradient-to-r from-amber-500 to-orange-400' :
+                                  'bg-gradient-to-r from-rose-500 to-red-400'
+                                }`}
+                                style={{ width: `${progress}%` }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`} />
+                            {kpi.status.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <button
+                            onClick={() => handleDeleteKPI(kpi.id)}
+                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete KPI"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* PIPs Tab */}
+        {activeTab === 'pips' && (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50/50">
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Employee</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Reason</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Duration</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {pips.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-6 py-12 text-center">
+                      <AlertTriangle className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                      <p className="text-gray-500 font-medium">No PIPs found</p>
+                      <p className="text-sm text-gray-400 mt-1">Performance Improvement Plans will appear here</p>
+                    </td>
+                  </tr>
+                ) : (
+                  pips.map((pip) => (
+                    <tr key={pip.id} className="hover:bg-gray-50/50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-100 to-violet-100 flex items-center justify-center">
-                            <span className="text-sm font-semibold text-primary-700">
-                              {kpi.user_name?.charAt(0) || '?'}
+                          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-100 to-orange-100 flex items-center justify-center">
+                            <span className="text-sm font-semibold text-amber-700">
+                              {pip.user_name?.charAt(0) || '?'}
                             </span>
                           </div>
                           <div>
-                            <p className="font-medium text-gray-900">{kpi.user_name}</p>
-                            <p className="text-sm text-gray-500">{kpi.department}</p>
+                            <p className="font-medium text-gray-900">{pip.user_name}</p>
+                            <p className="text-sm text-gray-500">{pip.department}</p>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <div>
-                          <p className="font-medium text-gray-900">{kpi.title}</p>
-                          <p className="text-sm text-gray-500">
-                            {kpi.current_value} / {kpi.target_value} {kpi.unit}
-                          </p>
+                        <p className="text-gray-900 line-clamp-2 max-w-xs">{pip.reason}</p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm">
+                          <p className="text-gray-900">{new Date(pip.start_date).toLocaleDateString()}</p>
+                          <p className="text-gray-500">to {new Date(pip.end_date).toLocaleDateString()}</p>
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="w-36">
-                          <div className="flex items-center justify-between text-xs mb-1.5">
-                            <span className="font-medium text-gray-700">{progress}%</span>
-                          </div>
-                          <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                kpi.status === 'achieved' ? 'bg-gradient-to-r from-emerald-500 to-green-400' :
-                                kpi.status === 'on_track' ? 'bg-gradient-to-r from-blue-500 to-cyan-400' :
-                                kpi.status === 'at_risk' ? 'bg-gradient-to-r from-amber-500 to-orange-400' :
-                                'bg-gradient-to-r from-rose-500 to-red-400'
-                              }`}
-                              style={{ width: `${progress}%` }}
-                            />
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${statusConfig.bg} ${statusConfig.text}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`} />
-                          {kpi.status.replace('_', ' ')}
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
+                          pip.status === 'active' ? 'bg-amber-100 text-amber-700' :
+                          pip.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                          pip.status === 'failed' ? 'bg-red-100 text-red-700' :
+                          'bg-blue-100 text-blue-700'
+                        }`}>
+                          {pip.status}
                         </span>
                       </td>
+                      <td className="px-6 py-4">
+                        {pip.status === 'active' && (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleUpdatePIPStatus(pip.id, 'completed', 'Successfully completed improvement plan')}
+                              className="px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors"
+                            >
+                              Complete
+                            </button>
+                            <button
+                              onClick={() => handleUpdatePIPStatus(pip.id, 'failed', 'Did not meet improvement goals')}
+                              className="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
+                            >
+                              Failed
+                            </button>
+                          </div>
+                        )}
+                      </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Notes Tab */}
+        {activeTab === 'notes' && (
+          <div className="p-6">
+            {notes.length === 0 ? (
+              <div className="text-center py-12">
+                <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p className="text-gray-500 font-medium">No performance notes</p>
+                <p className="text-sm text-gray-400 mt-1">Notes about employee performance will appear here</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {notes.map((note) => (
+                  <div key={note.id} className={`p-4 rounded-xl border ${
+                    note.type === 'praise' ? 'bg-emerald-50 border-emerald-200' :
+                    note.type === 'concern' ? 'bg-red-50 border-red-200' :
+                    'bg-blue-50 border-blue-200'
+                  }`}>
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                          note.type === 'praise' ? 'bg-emerald-200' :
+                          note.type === 'concern' ? 'bg-red-200' :
+                          'bg-blue-200'
+                        }`}>
+                          <span className={`text-sm font-semibold ${
+                            note.type === 'praise' ? 'text-emerald-700' :
+                            note.type === 'concern' ? 'text-red-700' :
+                            'text-blue-700'
+                          }`}>
+                            {note.user_name?.charAt(0) || '?'}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="font-medium text-gray-900">{note.user_name}</p>
+                          <p className="text-sm text-gray-500">{note.department}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                          note.type === 'praise' ? 'bg-emerald-200 text-emerald-700' :
+                          note.type === 'concern' ? 'bg-red-200 text-red-700' :
+                          'bg-blue-200 text-blue-700'
+                        }`}>
+                          {note.type}
+                        </span>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {new Date(note.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-gray-700">{note.content}</p>
+                    <p className="text-xs text-gray-500 mt-2">By: {note.author_name}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Modals */}
+      {showCreateKPIModal && (
+        <CreateKPIModal
+          onClose={() => setShowCreateKPIModal(false)}
+          onSuccess={() => {
+            setShowCreateKPIModal(false);
+            loadData();
+          }}
+        />
+      )}
+      {showCreatePIPModal && (
+        <CreatePIPModal
+          onClose={() => setShowCreatePIPModal(false)}
+          onSuccess={() => {
+            setShowCreatePIPModal(false);
+            loadData();
+          }}
+        />
+      )}
+      {showCreateNoteModal && (
+        <CreateNoteModal
+          onClose={() => setShowCreateNoteModal(false)}
+          onSuccess={() => {
+            setShowCreateNoteModal(false);
+            loadData();
+          }}
+        />
+      )}
     </div>
   );
 }
