@@ -26,4 +26,4 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { authenticateToken, requireAdmin, JWT_SECRET };
+module.exports = { authenticateToken, requireAdmin, isAdmin: requireAdmin, JWT_SECRET };
