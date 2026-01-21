@@ -27,14 +27,15 @@ interface PayrollStats {
 
 interface Payslip {
   id: string;
-  employee_name: string;
-  employee_id: string;
-  month: string;
-  year: string;
-  gross_salary: number;
+  user_name: string;
+  user_id: string;
+  month: number;
+  year: number;
+  gross_earnings: number;
   net_salary: number;
+  total_deductions: number;
   status: 'draft' | 'approved' | 'paid';
-  payment_date?: string;
+  paid_at?: string;
 }
 
 export default function PayrollDashboard() {
@@ -100,7 +101,7 @@ export default function PayrollDashboard() {
 
   const filteredPayslips = payslips.filter(p => {
     if (filter !== 'all' && p.status !== filter) return false;
-    if (searchQuery && !p.employee_name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (searchQuery && !p.user_name?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
 
@@ -298,20 +299,20 @@ export default function PayrollDashboard() {
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
                           <span className="text-primary-600 font-medium">
-                            {payslip.employee_name.charAt(0)}
+                            {payslip.user_name?.charAt(0) || '?'}
                           </span>
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">{payslip.employee_name}</p>
-                          <p className="text-sm text-gray-500">ID: {payslip.employee_id}</p>
+                          <p className="font-medium text-gray-900">{payslip.user_name || 'Unknown'}</p>
+                          <p className="text-sm text-gray-500">ID: {payslip.user_id}</p>
                         </div>
                       </div>
                     </td>
                     <td className="px-5 py-4 text-gray-900 font-medium">
-                      {formatCurrency(payslip.gross_salary)}
+                      {formatCurrency(payslip.gross_earnings || 0)}
                     </td>
                     <td className="px-5 py-4 text-red-600">
-                      -{formatCurrency(payslip.gross_salary - payslip.net_salary)}
+                      -{formatCurrency(payslip.total_deductions || 0)}
                     </td>
                     <td className="px-5 py-4 text-green-600 font-semibold">
                       {formatCurrency(payslip.net_salary)}

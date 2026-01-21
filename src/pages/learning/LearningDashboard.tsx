@@ -33,11 +33,12 @@ interface Course {
   description: string;
   category: string;
   duration_hours: number;
-  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  difficulty_level: 'beginner' | 'intermediate' | 'advanced';
   instructor: string;
+  instructor_name?: string;
   enrolled_count: number;
-  rating: number;
-  thumbnail?: string;
+  rating?: number;
+  thumbnail_url?: string;
 }
 
 interface Enrollment {
@@ -222,8 +223,8 @@ export default function LearningDashboard() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="font-semibold text-gray-900">{course.title}</h3>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${getDifficultyColor(course.difficulty)}`}>
-                        {course.difficulty}
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${getDifficultyColor(course.difficulty_level)}`}>
+                        {course.difficulty_level}
                       </span>
                     </div>
                     <p className="text-sm text-gray-500 line-clamp-1">{course.description}</p>
@@ -236,10 +237,12 @@ export default function LearningDashboard() {
                         <Users className="w-4 h-4" />
                         {course.enrolled_count} enrolled
                       </span>
-                      <span className="flex items-center gap-1 text-yellow-600">
-                        <Star className="w-4 h-4 fill-yellow-400" />
-                        {course.rating.toFixed(1)}
-                      </span>
+                      {course.rating !== undefined && (
+                        <span className="flex items-center gap-1 text-yellow-600">
+                          <Star className="w-4 h-4 fill-yellow-400" />
+                          {course.rating.toFixed(1)}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <button
