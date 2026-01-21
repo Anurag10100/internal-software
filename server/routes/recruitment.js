@@ -14,7 +14,7 @@ router.get('/jobs', authenticateToken, (req, res) => {
     const { status, department } = req.query;
     let query = `
       SELECT jp.*, u.name as posted_by_name,
-             (SELECT COUNT(*) FROM candidates WHERE job_id = jp.id) as applicants_count
+             (SELECT COUNT(*) FROM candidates WHERE job_id = jp.id) as candidates_count
       FROM job_postings jp
       LEFT JOIN users u ON jp.posted_by = u.id
       WHERE 1=1
