@@ -24,6 +24,8 @@ const documentsRoutes = require('./routes/documents');
 const announcementsRoutes = require('./routes/announcements');
 const offboardingRoutes = require('./routes/offboarding');
 const analyticsRoutes = require('./routes/analytics');
+// BoothPilot AI
+const boothpilotRoutes = require('./routes/boothpilot');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -59,6 +61,8 @@ app.use('/api/documents', documentsRoutes);
 app.use('/api/announcements', announcementsRoutes);
 app.use('/api/offboarding', offboardingRoutes);
 app.use('/api/analytics', analyticsRoutes);
+// BoothPilot AI Routes
+app.use('/api/boothpilot', boothpilotRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

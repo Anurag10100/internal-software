@@ -2,6 +2,7 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const { createExtendedTables, seedExtendedData } = require('./schema-extensions');
+const { createBoothPilotTables, seedBoothPilotData } = require('./boothpilot-schema');
 
 const dbPath = path.join(__dirname, '..', 'data', 'database.sqlite');
 const db = new Database(dbPath);
@@ -326,6 +327,10 @@ function initializeDatabase() {
   // Create extended enterprise tables
   createExtendedTables(db);
   seedExtendedData(db);
+
+  // Create BoothPilot AI tables
+  createBoothPilotTables(db);
+  seedBoothPilotData(db);
 }
 
 function seedDefaultData() {

@@ -2,11 +2,24 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import { ToastProvider } from './context/ToastContext';
+import { BoothPilotProvider } from './context/BoothPilotContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import BPProtectedRoute from './components/BPProtectedRoute';
 import Layout from './components/layout/Layout';
 
 // Pages
 import Login from './pages/Login';
+
+// BoothPilot AI Pages
+import BPLogin from './pages/boothpilot/BPLogin';
+import BPLayout from './pages/boothpilot/BPLayout';
+import BPDashboard from './pages/boothpilot/BPDashboard';
+import BPBoothMode from './pages/boothpilot/BPBoothMode';
+import BPLeadsList from './pages/boothpilot/BPLeadsList';
+import BPLeadDetail from './pages/boothpilot/BPLeadDetail';
+import BPSettingsUsers from './pages/boothpilot/settings/BPSettingsUsers';
+import BPSettingsQuestions from './pages/boothpilot/settings/BPSettingsQuestions';
+import BPSettingsExhibitor from './pages/boothpilot/settings/BPSettingsExhibitor';
 import Dashboard from './pages/Dashboard';
 import Profile from './pages/Profile';
 import MyTasks from './pages/tasks/MyTasks';
@@ -50,9 +63,29 @@ function App() {
     <AuthProvider>
       <AppProvider>
         <ToastProvider>
-          <Routes>
-            {/* Public Route */}
-            <Route path="/login" element={<Login />} />
+          <BoothPilotProvider>
+            <Routes>
+              {/* BoothPilot AI Routes */}
+              <Route path="/boothpilot/login" element={<BPLogin />} />
+              <Route
+                path="/boothpilot/*"
+                element={
+                  <BPProtectedRoute>
+                    <BPLayout />
+                  </BPProtectedRoute>
+                }
+              >
+                <Route index element={<BPDashboard />} />
+                <Route path="booth" element={<BPBoothMode />} />
+                <Route path="leads" element={<BPLeadsList />} />
+                <Route path="leads/:id" element={<BPLeadDetail />} />
+                <Route path="settings/users" element={<BPSettingsUsers />} />
+                <Route path="settings/questions" element={<BPSettingsQuestions />} />
+                <Route path="settings/exhibitor" element={<BPSettingsExhibitor />} />
+              </Route>
+
+              {/* Public Route */}
+              <Route path="/login" element={<Login />} />
 
             {/* Protected Routes */}
             <Route
@@ -222,7 +255,8 @@ function App() {
                 </ProtectedRoute>
               }
             />
-          </Routes>
+            </Routes>
+          </BoothPilotProvider>
         </ToastProvider>
       </AppProvider>
     </AuthProvider>
