@@ -5,9 +5,9 @@ const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 
 // Get all tasks (with user info)
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
-    const tasks = db.prepare(`
+    const tasks = await db.prepare(`
       SELECT
         t.*,
         assignedBy.name as assigned_by_name,
@@ -43,9 +43,9 @@ router.get('/', authenticateToken, (req, res) => {
 });
 
 // Get my tasks (assigned to me)
-router.get('/my-tasks', authenticateToken, (req, res) => {
+router.get('/my-tasks', authenticateToken, async (req, res) => {
   try {
-    const tasks = db.prepare(`
+    const tasks = await db.prepare(`
       SELECT
         t.*,
         assignedBy.name as assigned_by_name
@@ -78,9 +78,9 @@ router.get('/my-tasks', authenticateToken, (req, res) => {
 });
 
 // Get delegated tasks (assigned by me)
-router.get('/delegated', authenticateToken, (req, res) => {
+router.get('/delegated', authenticateToken, async (req, res) => {
   try {
-    const tasks = db.prepare(`
+    const tasks = await db.prepare(`
       SELECT
         t.*,
         assignedTo.name as assigned_to_name
@@ -114,7 +114,7 @@ router.get('/delegated', authenticateToken, (req, res) => {
 });
 
 // Create task
-router.post('/', authenticateToken, (req, res) => {
+router.post('/', authenticateToken, async (req, res) => {
   try {
     const { title, description, assignedTo, dueDate, dueTime, priority, tags } = req.body;
 
@@ -125,12 +125,12 @@ router.post('/', authenticateToken, (req, res) => {
     const taskId = `task-${Date.now()}`;
     const tagsString = Array.isArray(tags) ? tags.join(',') : (tags || '');
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO tasks (id, title, description, assigned_by_user_id, assigned_to_user_id, due_date, due_time, status, priority, tags)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
     `).run(taskId, title, description || '', req.user.id, assignedTo, dueDate, dueTime, priority || 'medium', tagsString);
 
-    const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+    const task = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
 
     res.status(201).json({
       message: 'Task created successfully',
@@ -146,19 +146,19 @@ router.post('/', authenticateToken, (req, res) => {
 });
 
 // Update task
-router.put('/:id', authenticateToken, (req, res) => {
+router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { title, description, status, priority, dueDate, dueTime, tags } = req.body;
 
-    const existingTask = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
+    const existingTask = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
     if (!existingTask) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
     const tagsString = Array.isArray(tags) ? tags.join(',') : (tags !== undefined ? tags : existingTask.tags);
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE tasks SET
         title = COALESCE(?, title),
         description = COALESCE(?, description),
@@ -170,7 +170,7 @@ router.put('/:id', authenticateToken, (req, res) => {
       WHERE id = ?
     `).run(title, description, status, priority, dueDate, dueTime, tagsString, id);
 
-    const updatedTask = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
+    const updatedTask = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
 
     res.json({
       message: 'Task updated successfully',
@@ -186,16 +186,16 @@ router.put('/:id', authenticateToken, (req, res) => {
 });
 
 // Delete task
-router.delete('/:id', authenticateToken, (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const existingTask = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
+    const existingTask = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
     if (!existingTask) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
+    await db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
 
     res.json({ message: 'Task deleted successfully' });
   } catch (error) {

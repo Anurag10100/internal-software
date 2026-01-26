@@ -9,7 +9,7 @@ const { v4: uuidv4 } = require('uuid');
 // ==========================================
 
 // Get all announcements (filtered by audience)
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     const { type, priority } = req.query;
     const userDept = req.user.department;
@@ -41,7 +41,7 @@ router.get('/', authenticateToken, (req, res) => {
 
     query += ' ORDER BY a.is_pinned DESC, a.publish_at DESC, a.created_at DESC';
 
-    const announcements = db.prepare(query).all(...params);
+    const announcements = await db.prepare(query).all(...params);
     res.json(announcements);
   } catch (error) {
     console.error('Error fetching announcements:', error);
@@ -50,7 +50,7 @@ router.get('/', authenticateToken, (req, res) => {
 });
 
 // Get all announcements (admin)
-router.get('/admin/all', authenticateToken, isAdmin, (req, res) => {
+router.get('/admin/all', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { status } = req.query;
     let query = `
@@ -69,7 +69,7 @@ router.get('/admin/all', authenticateToken, isAdmin, (req, res) => {
 
     query += ' ORDER BY a.created_at DESC';
 
-    const announcements = db.prepare(query).all(...params);
+    const announcements = await db.prepare(query).all(...params);
     res.json(announcements);
   } catch (error) {
     console.error('Error fetching announcements:', error);
@@ -78,9 +78,9 @@ router.get('/admin/all', authenticateToken, isAdmin, (req, res) => {
 });
 
 // Get single announcement
-router.get('/:id', authenticateToken, (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
-    const announcement = db.prepare(`
+    const announcement = await db.prepare(`
       SELECT a.*, u.name as author_name, u.avatar as author_avatar
       FROM announcements a
       JOIN users u ON a.author_id = u.id
@@ -92,9 +92,9 @@ router.get('/:id', authenticateToken, (req, res) => {
     }
 
     // Mark as read
-    const existing = db.prepare('SELECT id FROM announcement_reads WHERE announcement_id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const existing = await db.prepare('SELECT id FROM announcement_reads WHERE announcement_id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (!existing) {
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO announcement_reads (id, announcement_id, user_id)
         VALUES (?, ?, ?)
       `).run(`ar-${uuidv4()}`, req.params.id, req.user.id);
@@ -108,17 +108,17 @@ router.get('/:id', authenticateToken, (req, res) => {
 });
 
 // Create announcement
-router.post('/', authenticateToken, isAdmin, (req, res) => {
+router.post('/', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { title, content, type, priority, target_audience, target_departments, target_locations, publish_at, expires_at, is_pinned, requires_acknowledgment, attachment_url, status } = req.body;
 
     const id = `ann-${uuidv4()}`;
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO announcements (id, title, content, type, priority, target_audience, target_departments, target_locations, author_id, publish_at, expires_at, is_pinned, requires_acknowledgment, attachment_url, status)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, title, content, type || 'general', priority || 'normal', target_audience || 'all', target_departments, target_locations, req.user.id, publish_at, expires_at, is_pinned ? 1 : 0, requires_acknowledgment ? 1 : 0, attachment_url, status || 'draft');
 
-    const announcement = db.prepare('SELECT * FROM announcements WHERE id = ?').get(id);
+    const announcement = await db.prepare('SELECT * FROM announcements WHERE id = ?').get(id);
     res.status(201).json(announcement);
   } catch (error) {
     console.error('Error creating announcement:', error);
@@ -127,11 +127,11 @@ router.post('/', authenticateToken, isAdmin, (req, res) => {
 });
 
 // Update announcement
-router.put('/:id', authenticateToken, isAdmin, (req, res) => {
+router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { title, content, type, priority, target_audience, target_departments, target_locations, publish_at, expires_at, is_pinned, requires_acknowledgment, attachment_url, status } = req.body;
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE announcements SET title = ?, content = ?, type = ?, priority = ?,
       target_audience = ?, target_departments = ?, target_locations = ?,
       publish_at = ?, expires_at = ?, is_pinned = ?, requires_acknowledgment = ?,
@@ -139,7 +139,7 @@ router.put('/:id', authenticateToken, isAdmin, (req, res) => {
       WHERE id = ?
     `).run(title, content, type, priority, target_audience, target_departments, target_locations, publish_at, expires_at, is_pinned ? 1 : 0, requires_acknowledgment ? 1 : 0, attachment_url, status, req.params.id);
 
-    const announcement = db.prepare('SELECT * FROM announcements WHERE id = ?').get(req.params.id);
+    const announcement = await db.prepare('SELECT * FROM announcements WHERE id = ?').get(req.params.id);
     res.json(announcement);
   } catch (error) {
     console.error('Error updating announcement:', error);
@@ -148,10 +148,10 @@ router.put('/:id', authenticateToken, isAdmin, (req, res) => {
 });
 
 // Delete announcement
-router.delete('/:id', authenticateToken, isAdmin, (req, res) => {
+router.delete('/:id', authenticateToken, isAdmin, async (req, res) => {
   try {
-    db.prepare('DELETE FROM announcement_reads WHERE announcement_id = ?').run(req.params.id);
-    db.prepare('DELETE FROM announcements WHERE id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM announcement_reads WHERE announcement_id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM announcements WHERE id = ?').run(req.params.id);
     res.json({ message: 'Announcement deleted' });
   } catch (error) {
     console.error('Error deleting announcement:', error);
@@ -160,9 +160,9 @@ router.delete('/:id', authenticateToken, isAdmin, (req, res) => {
 });
 
 // Acknowledge announcement
-router.post('/:id/acknowledge', authenticateToken, (req, res) => {
+router.post('/:id/acknowledge', authenticateToken, async (req, res) => {
   try {
-    db.prepare(`
+    await db.prepare(`
       UPDATE announcement_reads SET acknowledged_at = CURRENT_TIMESTAMP
       WHERE announcement_id = ? AND user_id = ?
     `).run(req.params.id, req.user.id);
@@ -178,7 +178,7 @@ router.post('/:id/acknowledge', authenticateToken, (req, res) => {
 // ==========================================
 
 // Get all events
-router.get('/events/all', authenticateToken, (req, res) => {
+router.get('/events/all', authenticateToken, async (req, res) => {
   try {
     const { start_date, end_date, event_type } = req.query;
     const userDept = req.user.department;
@@ -212,7 +212,7 @@ router.get('/events/all', authenticateToken, (req, res) => {
 
     query += ' ORDER BY e.start_date, e.start_time';
 
-    const events = db.prepare(query).all(...params);
+    const events = await db.prepare(query).all(...params);
     res.json(events);
   } catch (error) {
     console.error('Error fetching events:', error);
@@ -221,9 +221,9 @@ router.get('/events/all', authenticateToken, (req, res) => {
 });
 
 // Get upcoming events
-router.get('/events/upcoming', authenticateToken, (req, res) => {
+router.get('/events/upcoming', authenticateToken, async (req, res) => {
   try {
-    const events = db.prepare(`
+    const events = await db.prepare(`
       SELECT e.*, o.name as organizer_name,
              (SELECT COUNT(*) FROM event_registrations WHERE event_id = e.id AND status = 'registered') as registrations_count,
              (SELECT id FROM event_registrations WHERE event_id = e.id AND user_id = ?) as my_registration
@@ -241,9 +241,9 @@ router.get('/events/upcoming', authenticateToken, (req, res) => {
 });
 
 // Get single event
-router.get('/events/:id', authenticateToken, (req, res) => {
+router.get('/events/:id', authenticateToken, async (req, res) => {
   try {
-    const event = db.prepare(`
+    const event = await db.prepare(`
       SELECT e.*, o.name as organizer_name, o.email as organizer_email
       FROM company_events e
       JOIN users o ON e.organizer_id = o.id
@@ -255,7 +255,7 @@ router.get('/events/:id', authenticateToken, (req, res) => {
     }
 
     // Get registrations
-    event.registrations = db.prepare(`
+    event.registrations = await db.prepare(`
       SELECT er.*, u.name as user_name, u.department, u.avatar
       FROM event_registrations er
       JOIN users u ON er.user_id = u.id
@@ -271,17 +271,17 @@ router.get('/events/:id', authenticateToken, (req, res) => {
 });
 
 // Create event
-router.post('/events', authenticateToken, isAdmin, (req, res) => {
+router.post('/events', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { title, description, event_type, start_date, end_date, start_time, end_time, location, virtual_link, is_all_day, is_recurring, recurrence_pattern, target_audience, target_departments, max_participants, registration_required, registration_deadline } = req.body;
 
     const id = `evt-${uuidv4()}`;
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO company_events (id, title, description, event_type, start_date, end_date, start_time, end_time, location, virtual_link, is_all_day, is_recurring, recurrence_pattern, organizer_id, target_audience, target_departments, max_participants, registration_required, registration_deadline)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, title, description, event_type || 'meeting', start_date, end_date || start_date, start_time, end_time, location, virtual_link, is_all_day ? 1 : 0, is_recurring ? 1 : 0, recurrence_pattern, req.user.id, target_audience || 'all', target_departments, max_participants, registration_required ? 1 : 0, registration_deadline);
 
-    const event = db.prepare('SELECT * FROM company_events WHERE id = ?').get(id);
+    const event = await db.prepare('SELECT * FROM company_events WHERE id = ?').get(id);
     res.status(201).json(event);
   } catch (error) {
     console.error('Error creating event:', error);
@@ -290,11 +290,11 @@ router.post('/events', authenticateToken, isAdmin, (req, res) => {
 });
 
 // Update event
-router.put('/events/:id', authenticateToken, isAdmin, (req, res) => {
+router.put('/events/:id', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { title, description, event_type, start_date, end_date, start_time, end_time, location, virtual_link, is_all_day, target_audience, target_departments, max_participants, registration_required, registration_deadline, status } = req.body;
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE company_events SET title = ?, description = ?, event_type = ?,
       start_date = ?, end_date = ?, start_time = ?, end_time = ?, location = ?,
       virtual_link = ?, is_all_day = ?, target_audience = ?, target_departments = ?,
@@ -302,7 +302,7 @@ router.put('/events/:id', authenticateToken, isAdmin, (req, res) => {
       WHERE id = ?
     `).run(title, description, event_type, start_date, end_date, start_time, end_time, location, virtual_link, is_all_day ? 1 : 0, target_audience, target_departments, max_participants, registration_required ? 1 : 0, registration_deadline, status, req.params.id);
 
-    const event = db.prepare('SELECT * FROM company_events WHERE id = ?').get(req.params.id);
+    const event = await db.prepare('SELECT * FROM company_events WHERE id = ?').get(req.params.id);
     res.json(event);
   } catch (error) {
     console.error('Error updating event:', error);
@@ -311,9 +311,9 @@ router.put('/events/:id', authenticateToken, isAdmin, (req, res) => {
 });
 
 // Register for event
-router.post('/events/:id/register', authenticateToken, (req, res) => {
+router.post('/events/:id/register', authenticateToken, async (req, res) => {
   try {
-    const event = db.prepare('SELECT max_participants, registration_deadline FROM company_events WHERE id = ?').get(req.params.id);
+    const event = await db.prepare('SELECT max_participants, registration_deadline FROM company_events WHERE id = ?').get(req.params.id);
 
     // Check deadline
     if (event.registration_deadline && new Date(event.registration_deadline) < new Date()) {
@@ -322,20 +322,20 @@ router.post('/events/:id/register', authenticateToken, (req, res) => {
 
     // Check capacity
     if (event.max_participants) {
-      const registered = db.prepare('SELECT COUNT(*) as count FROM event_registrations WHERE event_id = ? AND status = ?').get(req.params.id, 'registered');
+      const registered = await db.prepare('SELECT COUNT(*) as count FROM event_registrations WHERE event_id = ? AND status = ?').get(req.params.id, 'registered');
       if (registered.count >= event.max_participants) {
         return res.status(400).json({ error: 'Event is full' });
       }
     }
 
     // Check if already registered
-    const existing = db.prepare('SELECT id FROM event_registrations WHERE event_id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const existing = await db.prepare('SELECT id FROM event_registrations WHERE event_id = ? AND user_id = ?').get(req.params.id, req.user.id);
     if (existing) {
       return res.status(400).json({ error: 'Already registered' });
     }
 
     const id = `er-${uuidv4()}`;
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO event_registrations (id, event_id, user_id)
       VALUES (?, ?, ?)
     `).run(id, req.params.id, req.user.id);
@@ -348,9 +348,9 @@ router.post('/events/:id/register', authenticateToken, (req, res) => {
 });
 
 // Cancel registration
-router.delete('/events/:id/register', authenticateToken, (req, res) => {
+router.delete('/events/:id/register', authenticateToken, async (req, res) => {
   try {
-    db.prepare('DELETE FROM event_registrations WHERE event_id = ? AND user_id = ?').run(req.params.id, req.user.id);
+    await db.prepare('DELETE FROM event_registrations WHERE event_id = ? AND user_id = ?').run(req.params.id, req.user.id);
     res.json({ message: 'Registration cancelled' });
   } catch (error) {
     console.error('Error cancelling:', error);
@@ -359,9 +359,9 @@ router.delete('/events/:id/register', authenticateToken, (req, res) => {
 });
 
 // Get my registered events
-router.get('/events/registered/my-events', authenticateToken, (req, res) => {
+router.get('/events/registered/my-events', authenticateToken, async (req, res) => {
   try {
-    const events = db.prepare(`
+    const events = await db.prepare(`
       SELECT e.*, er.registered_at, o.name as organizer_name
       FROM event_registrations er
       JOIN company_events e ON er.event_id = e.id
@@ -381,7 +381,7 @@ router.get('/events/registered/my-events', authenticateToken, (req, res) => {
 // ==========================================
 
 // Get upcoming celebrations
-router.get('/celebrations/upcoming', authenticateToken, (req, res) => {
+router.get('/celebrations/upcoming', authenticateToken, async (req, res) => {
   try {
     const today = new Date();
     const monthDay = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -390,7 +390,7 @@ router.get('/celebrations/upcoming', authenticateToken, (req, res) => {
     const nextWeekMonthDay = `${String(nextWeek.getMonth() + 1).padStart(2, '0')}-${String(nextWeek.getDate()).padStart(2, '0')}`;
 
     // Get birthdays from employee_profiles
-    const birthdays = db.prepare(`
+    const birthdays = await db.prepare(`
       SELECT u.id, u.name, u.avatar, u.department, ep.date_of_birth,
              'birthday' as type
       FROM employee_profiles ep
@@ -399,7 +399,7 @@ router.get('/celebrations/upcoming', authenticateToken, (req, res) => {
     `).all(monthDay, nextWeekMonthDay);
 
     // Get work anniversaries (from user created_at)
-    const anniversaries = db.prepare(`
+    const anniversaries = await db.prepare(`
       SELECT u.id, u.name, u.avatar, u.department, u.created_at as work_anniversary,
              'anniversary' as type
       FROM users u
@@ -414,19 +414,19 @@ router.get('/celebrations/upcoming', authenticateToken, (req, res) => {
 });
 
 // Get today's celebrations
-router.get('/celebrations/today', authenticateToken, (req, res) => {
+router.get('/celebrations/today', authenticateToken, async (req, res) => {
   try {
     const today = new Date();
     const monthDay = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-    const birthdays = db.prepare(`
+    const birthdays = await db.prepare(`
       SELECT u.id, u.name, u.avatar, u.department, 'birthday' as type
       FROM employee_profiles ep
       JOIN users u ON ep.user_id = u.id
       WHERE substr(ep.date_of_birth, 6) = ?
     `).all(monthDay);
 
-    const anniversaries = db.prepare(`
+    const anniversaries = await db.prepare(`
       SELECT u.id, u.name, u.avatar, u.department, 'anniversary' as type,
              CAST((julianday('now') - julianday(u.created_at)) / 365 AS INTEGER) as years
       FROM users u
@@ -445,7 +445,7 @@ router.get('/celebrations/today', authenticateToken, (req, res) => {
 // ==========================================
 
 // Get my notifications
-router.get('/notifications/my-notifications', authenticateToken, (req, res) => {
+router.get('/notifications/my-notifications', authenticateToken, async (req, res) => {
   try {
     const { unread_only } = req.query;
     let query = `
@@ -456,7 +456,7 @@ router.get('/notifications/my-notifications', authenticateToken, (req, res) => {
     }
     query += ' ORDER BY created_at DESC LIMIT 50';
 
-    const notifications = db.prepare(query).all(req.user.id);
+    const notifications = await db.prepare(query).all(req.user.id);
     res.json(notifications);
   } catch (error) {
     console.error('Error fetching notifications:', error);
@@ -465,9 +465,9 @@ router.get('/notifications/my-notifications', authenticateToken, (req, res) => {
 });
 
 // Get unread count
-router.get('/notifications/unread-count', authenticateToken, (req, res) => {
+router.get('/notifications/unread-count', authenticateToken, async (req, res) => {
   try {
-    const count = db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0').get(req.user.id);
+    const count = await db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0').get(req.user.id);
     res.json({ count: count.count });
   } catch (error) {
     console.error('Error fetching count:', error);
@@ -476,9 +476,9 @@ router.get('/notifications/unread-count', authenticateToken, (req, res) => {
 });
 
 // Mark notification as read
-router.post('/notifications/:id/read', authenticateToken, (req, res) => {
+router.post('/notifications/:id/read', authenticateToken, async (req, res) => {
   try {
-    db.prepare('UPDATE notifications SET is_read = 1, read_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+    await db.prepare('UPDATE notifications SET is_read = 1, read_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
     res.json({ message: 'Marked as read' });
   } catch (error) {
     console.error('Error marking read:', error);
@@ -487,9 +487,9 @@ router.post('/notifications/:id/read', authenticateToken, (req, res) => {
 });
 
 // Mark all as read
-router.post('/notifications/mark-all-read', authenticateToken, (req, res) => {
+router.post('/notifications/mark-all-read', authenticateToken, async (req, res) => {
   try {
-    db.prepare('UPDATE notifications SET is_read = 1, read_at = CURRENT_TIMESTAMP WHERE user_id = ? AND is_read = 0').run(req.user.id);
+    await db.prepare('UPDATE notifications SET is_read = 1, read_at = CURRENT_TIMESTAMP WHERE user_id = ? AND is_read = 0').run(req.user.id);
     res.json({ message: 'All marked as read' });
   } catch (error) {
     console.error('Error marking all read:', error);
@@ -498,12 +498,12 @@ router.post('/notifications/mark-all-read', authenticateToken, (req, res) => {
 });
 
 // Create notification (internal use)
-router.post('/notifications', authenticateToken, isAdmin, (req, res) => {
+router.post('/notifications', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { user_id, title, message, type, action_url } = req.body;
 
     const id = `notif-${uuidv4()}`;
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO notifications (id, user_id, title, message, type, action_url)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(id, user_id, title, message, type || 'info', action_url);
@@ -519,37 +519,37 @@ router.post('/notifications', authenticateToken, isAdmin, (req, res) => {
 // COMMUNICATIONS DASHBOARD
 // ==========================================
 
-router.get('/dashboard', authenticateToken, (req, res) => {
+router.get('/dashboard', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
     const isAdmin = req.user.role === 'admin';
 
     const myStats = {
-      unreadAnnouncements: db.prepare(`
+      unreadAnnouncements: (await db.prepare(`
         SELECT COUNT(*) as count FROM announcements a
         WHERE a.status = 'published'
           AND (a.publish_at IS NULL OR a.publish_at <= datetime('now'))
           AND (a.expires_at IS NULL OR a.expires_at > datetime('now'))
           AND NOT EXISTS (SELECT 1 FROM announcement_reads ar WHERE ar.announcement_id = a.id AND ar.user_id = ?)
-      `).get(userId).count,
-      upcomingEvents: db.prepare(`
+      `).get(userId)).count,
+      upcomingEvents: (await db.prepare(`
         SELECT COUNT(*) as count FROM event_registrations er
         JOIN company_events e ON er.event_id = e.id
         WHERE er.user_id = ? AND e.start_date >= date('now') AND e.status = 'scheduled'
-      `).get(userId).count,
-      unreadNotifications: db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0').get(userId).count
+      `).get(userId)).count,
+      unreadNotifications: (await db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0').get(userId)).count
     };
 
     let orgStats = null;
     if (isAdmin) {
       orgStats = {
-        totalAnnouncements: db.prepare('SELECT COUNT(*) as count FROM announcements WHERE status = ?').get('published').count,
-        upcomingEvents: db.prepare('SELECT COUNT(*) as count FROM company_events WHERE start_date >= date("now") AND status = ?').get('scheduled').count,
-        todaysCelebrations: db.prepare(`
+        totalAnnouncements: (await db.prepare('SELECT COUNT(*) as count FROM announcements WHERE status = ?').get('published')).count,
+        upcomingEvents: (await db.prepare('SELECT COUNT(*) as count FROM company_events WHERE start_date >= date("now") AND status = ?').get('scheduled')).count,
+        todaysCelebrations: (await db.prepare(`
           SELECT COUNT(*) as count FROM employee_profiles ep
           WHERE substr(ep.date_of_birth, 6) = strftime('%m-%d', 'now')
-        `).get().count,
-        recentAnnouncements: db.prepare(`
+        `).get()).count,
+        recentAnnouncements: await db.prepare(`
           SELECT a.id, a.title, a.type, a.priority, a.created_at,
                  (SELECT COUNT(*) FROM announcement_reads WHERE announcement_id = a.id) as reads_count
           FROM announcements a

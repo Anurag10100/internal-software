@@ -9,57 +9,57 @@ const { v4: uuidv4 } = require('uuid');
 // ==========================================
 
 // Get comprehensive HR analytics
-router.get('/hr-overview', authenticateToken, isAdmin, (req, res) => {
+router.get('/hr-overview', authenticateToken, isAdmin, async (req, res) => {
   try {
     const stats = {
       // Headcount
-      totalEmployees: db.prepare('SELECT COUNT(*) as count FROM users').get().count,
-      newHiresThisMonth: db.prepare(`
+      totalEmployees: (await db.prepare('SELECT COUNT(*) as count FROM users').get()).count,
+      newHiresThisMonth: (await db.prepare(`
         SELECT COUNT(*) as count FROM users WHERE created_at >= date('now', 'start of month')
-      `).get().count,
-      newHiresThisYear: db.prepare(`
+      `).get()).count,
+      newHiresThisYear: (await db.prepare(`
         SELECT COUNT(*) as count FROM users WHERE created_at >= date('now', 'start of year')
-      `).get().count,
+      `).get()).count,
 
       // Attrition
-      exitsThisYear: db.prepare(`
+      exitsThisYear: (await db.prepare(`
         SELECT COUNT(*) as count FROM exit_requests
         WHERE status IN ('approved', 'completed') AND created_at >= date('now', 'start of year')
-      `).get().count,
+      `).get()).count,
 
       // Department breakdown
-      byDepartment: db.prepare(`
+      byDepartment: await db.prepare(`
         SELECT department, COUNT(*) as count FROM users
         GROUP BY department ORDER BY count DESC
       `).all(),
 
       // Role breakdown
-      byRole: db.prepare(`
+      byRole: await db.prepare(`
         SELECT role, COUNT(*) as count FROM users
         GROUP BY role ORDER BY count DESC
       `).all(),
 
       // Probation status
-      inProbation: db.prepare('SELECT COUNT(*) as count FROM team_members WHERE in_probation = 1').get().count,
+      inProbation: (await db.prepare('SELECT COUNT(*) as count FROM team_members WHERE in_probation = 1').get()).count,
 
       // Leave statistics
-      pendingLeaves: db.prepare('SELECT COUNT(*) as count FROM leave_requests WHERE status = ?').get('pending').count,
-      approvedLeavesToday: db.prepare(`
+      pendingLeaves: (await db.prepare('SELECT COUNT(*) as count FROM leave_requests WHERE status = ?').get('pending')).count,
+      approvedLeavesToday: (await db.prepare(`
         SELECT COUNT(*) as count FROM leave_requests
         WHERE status = 'approved' AND date('now') BETWEEN start_date AND end_date
-      `).get().count,
+      `).get()).count,
 
       // Task statistics
-      openTasks: db.prepare('SELECT COUNT(*) as count FROM tasks WHERE status != ?').get('completed').count,
-      overdueTasks: db.prepare(`
+      openTasks: (await db.prepare('SELECT COUNT(*) as count FROM tasks WHERE status != ?').get('completed')).count,
+      overdueTasks: (await db.prepare(`
         SELECT COUNT(*) as count FROM tasks
         WHERE status != 'completed' AND due_date < date('now')
-      `).get().count,
+      `).get()).count,
 
       // Performance
-      activeKPIs: db.prepare('SELECT COUNT(*) as count FROM kpis WHERE status != ?').get('achieved').count,
-      activePIPs: db.prepare('SELECT COUNT(*) as count FROM pips WHERE status = ?').get('active').count,
-      activeAppraisals: db.prepare('SELECT COUNT(*) as count FROM appraisal_cycles WHERE status = ?').get('active').count
+      activeKPIs: (await db.prepare('SELECT COUNT(*) as count FROM kpis WHERE status != ?').get('achieved')).count,
+      activePIPs: (await db.prepare('SELECT COUNT(*) as count FROM pips WHERE status = ?').get('active')).count,
+      activeAppraisals: (await db.prepare('SELECT COUNT(*) as count FROM appraisal_cycles WHERE status = ?').get('active')).count
     };
 
     res.json(stats);
@@ -70,11 +70,11 @@ router.get('/hr-overview', authenticateToken, isAdmin, (req, res) => {
 });
 
 // Get headcount trends
-router.get('/headcount-trends', authenticateToken, isAdmin, (req, res) => {
+router.get('/headcount-trends', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { period = '12' } = req.query; // months
 
-    const trends = db.prepare(`
+    const trends = await db.prepare(`
       SELECT
         strftime('%Y-%m', created_at) as month,
         COUNT(*) as hires
@@ -84,7 +84,7 @@ router.get('/headcount-trends', authenticateToken, isAdmin, (req, res) => {
       ORDER BY month
     `).all();
 
-    const exits = db.prepare(`
+    const exits = await db.prepare(`
       SELECT
         strftime('%Y-%m', last_working_day) as month,
         COUNT(*) as exits
@@ -103,38 +103,38 @@ router.get('/headcount-trends', authenticateToken, isAdmin, (req, res) => {
 });
 
 // Get attendance analytics
-router.get('/attendance-analytics', authenticateToken, isAdmin, (req, res) => {
+router.get('/attendance-analytics', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { month, year } = req.query;
     const currentMonth = month || new Date().getMonth() + 1;
     const currentYear = year || new Date().getFullYear();
 
     const stats = {
-      totalCheckIns: db.prepare(`
+      totalCheckIns: (await db.prepare(`
         SELECT COUNT(*) as count FROM check_ins
         WHERE strftime('%m', date) = ? AND strftime('%Y', date) = ?
-      `).get(String(currentMonth).padStart(2, '0'), String(currentYear)).count,
+      `).get(String(currentMonth).padStart(2, '0'), String(currentYear))).count,
 
-      onTimePercentage: db.prepare(`
+      onTimePercentage: (await db.prepare(`
         SELECT
           ROUND(COUNT(CASE WHEN status = 'on_time' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0), 1) as percentage
         FROM check_ins
         WHERE strftime('%m', date) = ? AND strftime('%Y', date) = ?
-      `).get(String(currentMonth).padStart(2, '0'), String(currentYear)).percentage || 0,
+      `).get(String(currentMonth).padStart(2, '0'), String(currentYear))).percentage || 0,
 
-      lateArrivals: db.prepare(`
+      lateArrivals: (await db.prepare(`
         SELECT COUNT(*) as count FROM check_ins
         WHERE status = 'late' AND strftime('%m', date) = ? AND strftime('%Y', date) = ?
-      `).get(String(currentMonth).padStart(2, '0'), String(currentYear)).count,
+      `).get(String(currentMonth).padStart(2, '0'), String(currentYear))).count,
 
-      byStatus: db.prepare(`
+      byStatus: await db.prepare(`
         SELECT status, COUNT(*) as count
         FROM check_ins
         WHERE strftime('%m', date) = ? AND strftime('%Y', date) = ?
         GROUP BY status
       `).all(String(currentMonth).padStart(2, '0'), String(currentYear)),
 
-      byLocation: db.prepare(`
+      byLocation: await db.prepare(`
         SELECT location, COUNT(*) as count
         FROM check_ins
         WHERE strftime('%m', date) = ? AND strftime('%Y', date) = ?
@@ -151,15 +151,15 @@ router.get('/attendance-analytics', authenticateToken, isAdmin, (req, res) => {
 });
 
 // Get leave analytics
-router.get('/leave-analytics', authenticateToken, isAdmin, (req, res) => {
+router.get('/leave-analytics', authenticateToken, isAdmin, async (req, res) => {
   try {
     const stats = {
-      totalRequests: db.prepare('SELECT COUNT(*) as count FROM leave_requests').get().count,
-      pendingRequests: db.prepare('SELECT COUNT(*) as count FROM leave_requests WHERE status = ?').get('pending').count,
-      approvedRequests: db.prepare('SELECT COUNT(*) as count FROM leave_requests WHERE status = ?').get('approved').count,
-      rejectedRequests: db.prepare('SELECT COUNT(*) as count FROM leave_requests WHERE status = ?').get('rejected').count,
+      totalRequests: (await db.prepare('SELECT COUNT(*) as count FROM leave_requests').get()).count,
+      pendingRequests: (await db.prepare('SELECT COUNT(*) as count FROM leave_requests WHERE status = ?').get('pending')).count,
+      approvedRequests: (await db.prepare('SELECT COUNT(*) as count FROM leave_requests WHERE status = ?').get('approved')).count,
+      rejectedRequests: (await db.prepare('SELECT COUNT(*) as count FROM leave_requests WHERE status = ?').get('rejected')).count,
 
-      byType: db.prepare(`
+      byType: await db.prepare(`
         SELECT leave_type, COUNT(*) as count
         FROM leave_requests
         WHERE created_at >= date('now', '-12 months')
@@ -167,7 +167,7 @@ router.get('/leave-analytics', authenticateToken, isAdmin, (req, res) => {
         ORDER BY count DESC
       `).all(),
 
-      byMonth: db.prepare(`
+      byMonth: await db.prepare(`
         SELECT strftime('%Y-%m', start_date) as month, COUNT(*) as count
         FROM leave_requests
         WHERE status = 'approved' AND start_date >= date('now', '-12 months')
@@ -175,7 +175,7 @@ router.get('/leave-analytics', authenticateToken, isAdmin, (req, res) => {
         ORDER BY month
       `).all(),
 
-      topRequesters: db.prepare(`
+      topRequesters: await db.prepare(`
         SELECT u.name, u.department, COUNT(lr.id) as leave_count
         FROM leave_requests lr
         JOIN users u ON lr.user_id = u.id
@@ -194,36 +194,36 @@ router.get('/leave-analytics', authenticateToken, isAdmin, (req, res) => {
 });
 
 // Get performance analytics
-router.get('/performance-analytics', authenticateToken, isAdmin, (req, res) => {
+router.get('/performance-analytics', authenticateToken, isAdmin, async (req, res) => {
   try {
     const stats = {
       kpiStats: {
-        total: db.prepare('SELECT COUNT(*) as count FROM kpis').get().count,
-        achieved: db.prepare('SELECT COUNT(*) as count FROM kpis WHERE status = ?').get('achieved').count,
-        onTrack: db.prepare('SELECT COUNT(*) as count FROM kpis WHERE status = ?').get('on_track').count,
-        atRisk: db.prepare('SELECT COUNT(*) as count FROM kpis WHERE status = ?').get('at_risk').count,
-        behind: db.prepare('SELECT COUNT(*) as count FROM kpis WHERE status = ?').get('behind').count
+        total: (await db.prepare('SELECT COUNT(*) as count FROM kpis').get()).count,
+        achieved: (await db.prepare('SELECT COUNT(*) as count FROM kpis WHERE status = ?').get('achieved')).count,
+        onTrack: (await db.prepare('SELECT COUNT(*) as count FROM kpis WHERE status = ?').get('on_track')).count,
+        atRisk: (await db.prepare('SELECT COUNT(*) as count FROM kpis WHERE status = ?').get('at_risk')).count,
+        behind: (await db.prepare('SELECT COUNT(*) as count FROM kpis WHERE status = ?').get('behind')).count
       },
 
       pipStats: {
-        active: db.prepare('SELECT COUNT(*) as count FROM pips WHERE status = ?').get('active').count,
-        completed: db.prepare('SELECT COUNT(*) as count FROM pips WHERE status = ?').get('completed').count,
-        failed: db.prepare('SELECT COUNT(*) as count FROM pips WHERE status = ?').get('failed').count
+        active: (await db.prepare('SELECT COUNT(*) as count FROM pips WHERE status = ?').get('active')).count,
+        completed: (await db.prepare('SELECT COUNT(*) as count FROM pips WHERE status = ?').get('completed')).count,
+        failed: (await db.prepare('SELECT COUNT(*) as count FROM pips WHERE status = ?').get('failed')).count
       },
 
-      goalProgress: db.prepare(`
+      goalProgress: await db.prepare(`
         SELECT category, AVG(progress) as avg_progress, COUNT(*) as count
         FROM goals WHERE status = 'active'
         GROUP BY category
       `).all(),
 
       recognitionStats: {
-        total: db.prepare('SELECT COUNT(*) as count FROM recognitions').get().count,
-        thisMonth: db.prepare(`
+        total: (await db.prepare('SELECT COUNT(*) as count FROM recognitions').get()).count,
+        thisMonth: (await db.prepare(`
           SELECT COUNT(*) as count FROM recognitions
           WHERE created_at >= date('now', 'start of month')
-        `).get().count,
-        byBadge: db.prepare(`
+        `).get()).count,
+        byBadge: await db.prepare(`
           SELECT badge, COUNT(*) as count
           FROM recognitions
           GROUP BY badge
@@ -232,9 +232,9 @@ router.get('/performance-analytics', authenticateToken, isAdmin, (req, res) => {
       },
 
       appraisalStats: {
-        activeCycles: db.prepare('SELECT COUNT(*) as count FROM appraisal_cycles WHERE status = ?').get('active').count,
-        pendingReviews: db.prepare('SELECT COUNT(*) as count FROM appraisals WHERE status IN (?, ?)').get('pending', 'self_review').count,
-        avgRating: db.prepare('SELECT AVG(final_rating) as avg FROM appraisals WHERE final_rating IS NOT NULL').get().avg || 0
+        activeCycles: (await db.prepare('SELECT COUNT(*) as count FROM appraisal_cycles WHERE status = ?').get('active')).count,
+        pendingReviews: (await db.prepare('SELECT COUNT(*) as count FROM appraisals WHERE status IN (?, ?)').get('pending', 'self_review')).count,
+        avgRating: (await db.prepare('SELECT AVG(final_rating) as avg FROM appraisals WHERE final_rating IS NOT NULL').get()).avg || 0
       }
     };
 
@@ -246,16 +246,16 @@ router.get('/performance-analytics', authenticateToken, isAdmin, (req, res) => {
 });
 
 // Get recruitment analytics
-router.get('/recruitment-analytics', authenticateToken, isAdmin, (req, res) => {
+router.get('/recruitment-analytics', authenticateToken, isAdmin, async (req, res) => {
   try {
     const stats = {
-      openPositions: db.prepare('SELECT COUNT(*) as count FROM job_postings WHERE status = ?').get('published').count,
-      totalCandidates: db.prepare('SELECT COUNT(*) as count FROM candidates').get().count,
-      candidatesThisMonth: db.prepare(`
+      openPositions: (await db.prepare('SELECT COUNT(*) as count FROM job_postings WHERE status = ?').get('published')).count,
+      totalCandidates: (await db.prepare('SELECT COUNT(*) as count FROM candidates').get()).count,
+      candidatesThisMonth: (await db.prepare(`
         SELECT COUNT(*) as count FROM candidates WHERE created_at >= date('now', 'start of month')
-      `).get().count,
+      `).get()).count,
 
-      pipelineStats: db.prepare(`
+      pipelineStats: await db.prepare(`
         SELECT stage, COUNT(*) as count
         FROM candidates
         WHERE status NOT IN ('hired', 'rejected')
@@ -271,12 +271,12 @@ router.get('/recruitment-analytics', authenticateToken, isAdmin, (req, res) => {
           END
       `).all(),
 
-      hiredThisYear: db.prepare(`
+      hiredThisYear: (await db.prepare(`
         SELECT COUNT(*) as count FROM candidates
         WHERE status = 'hired' AND created_at >= date('now', 'start of year')
-      `).get().count,
+      `).get()).count,
 
-      sourceBreakdown: db.prepare(`
+      sourceBreakdown: await db.prepare(`
         SELECT source, COUNT(*) as count
         FROM candidates
         WHERE created_at >= date('now', '-6 months')
@@ -284,19 +284,19 @@ router.get('/recruitment-analytics', authenticateToken, isAdmin, (req, res) => {
         ORDER BY count DESC
       `).all(),
 
-      timeToHire: db.prepare(`
+      timeToHire: (await db.prepare(`
         SELECT AVG(julianday(o.accepted_at) - julianday(c.created_at)) as avg_days
         FROM offer_letters o
         JOIN candidates c ON o.candidate_id = c.id
         WHERE o.status = 'accepted' AND o.accepted_at >= date('now', '-6 months')
-      `).get().avg_days || 0,
+      `).get()).avg_days || 0,
 
-      offerAcceptanceRate: db.prepare(`
+      offerAcceptanceRate: (await db.prepare(`
         SELECT
           ROUND(COUNT(CASE WHEN status = 'accepted' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0), 1) as rate
         FROM offer_letters
         WHERE created_at >= date('now', '-12 months')
-      `).get().rate || 0
+      `).get()).rate || 0
     };
 
     res.json(stats);
@@ -307,14 +307,14 @@ router.get('/recruitment-analytics', authenticateToken, isAdmin, (req, res) => {
 });
 
 // Get payroll analytics
-router.get('/payroll-analytics', authenticateToken, isAdmin, (req, res) => {
+router.get('/payroll-analytics', authenticateToken, isAdmin, async (req, res) => {
   try {
     const stats = {
-      totalPayroll: db.prepare('SELECT SUM(gross_salary) as total FROM employee_salaries').get().total || 0,
-      avgSalary: db.prepare('SELECT AVG(gross_salary) as avg FROM employee_salaries').get().avg || 0,
-      employeesWithSalary: db.prepare('SELECT COUNT(*) as count FROM employee_salaries').get().count,
+      totalPayroll: (await db.prepare('SELECT SUM(gross_salary) as total FROM employee_salaries').get()).total || 0,
+      avgSalary: (await db.prepare('SELECT AVG(gross_salary) as avg FROM employee_salaries').get()).avg || 0,
+      employeesWithSalary: (await db.prepare('SELECT COUNT(*) as count FROM employee_salaries').get()).count,
 
-      salaryByDepartment: db.prepare(`
+      salaryByDepartment: await db.prepare(`
         SELECT u.department,
                COUNT(es.id) as employees,
                SUM(es.gross_salary) as total_payroll,
@@ -325,19 +325,19 @@ router.get('/payroll-analytics', authenticateToken, isAdmin, (req, res) => {
         ORDER BY total_payroll DESC
       `).all(),
 
-      pendingPayslips: db.prepare('SELECT COUNT(*) as count FROM payslips WHERE status = ?').get('draft').count,
+      pendingPayslips: (await db.prepare('SELECT COUNT(*) as count FROM payslips WHERE status = ?').get('draft')).count,
 
       reimbursementsStats: {
-        pending: db.prepare('SELECT COUNT(*) as count FROM reimbursements WHERE status = ?').get('pending').count,
-        pendingAmount: db.prepare('SELECT SUM(amount) as total FROM reimbursements WHERE status = ?').get('pending').total || 0,
-        paidThisMonth: db.prepare(`
+        pending: (await db.prepare('SELECT COUNT(*) as count FROM reimbursements WHERE status = ?').get('pending')).count,
+        pendingAmount: (await db.prepare('SELECT SUM(amount) as total FROM reimbursements WHERE status = ?').get('pending')).total || 0,
+        paidThisMonth: (await db.prepare(`
           SELECT SUM(amount) as total FROM reimbursements
           WHERE status = 'paid' AND approved_at >= date('now', 'start of month')
-        `).get().total || 0
+        `).get()).total || 0
       },
 
-      activeLoans: db.prepare('SELECT COUNT(*) as count FROM employee_loans WHERE status = ?').get('active').count,
-      totalLoanOutstanding: db.prepare('SELECT SUM(remaining_amount) as total FROM employee_loans WHERE status = ?').get('active').total || 0
+      activeLoans: (await db.prepare('SELECT COUNT(*) as count FROM employee_loans WHERE status = ?').get('active')).count,
+      totalLoanOutstanding: (await db.prepare('SELECT SUM(remaining_amount) as total FROM employee_loans WHERE status = ?').get('active')).total || 0
     };
 
     res.json(stats);
@@ -348,19 +348,19 @@ router.get('/payroll-analytics', authenticateToken, isAdmin, (req, res) => {
 });
 
 // Get asset analytics
-router.get('/asset-analytics', authenticateToken, isAdmin, (req, res) => {
+router.get('/asset-analytics', authenticateToken, isAdmin, async (req, res) => {
   try {
     const stats = {
-      totalAssets: db.prepare('SELECT COUNT(*) as count FROM assets').get().count,
-      totalValue: db.prepare('SELECT SUM(current_value) as total FROM assets').get().total || 0,
+      totalAssets: (await db.prepare('SELECT COUNT(*) as count FROM assets').get()).count,
+      totalValue: (await db.prepare('SELECT SUM(current_value) as total FROM assets').get()).total || 0,
 
-      byStatus: db.prepare(`
+      byStatus: await db.prepare(`
         SELECT status, COUNT(*) as count
         FROM assets
         GROUP BY status
       `).all(),
 
-      byCategory: db.prepare(`
+      byCategory: await db.prepare(`
         SELECT ac.name, COUNT(a.id) as count, SUM(a.current_value) as value
         FROM asset_categories ac
         LEFT JOIN assets a ON ac.id = a.category_id
@@ -369,23 +369,23 @@ router.get('/asset-analytics', authenticateToken, isAdmin, (req, res) => {
         ORDER BY count DESC
       `).all(),
 
-      pendingRequests: db.prepare('SELECT COUNT(*) as count FROM asset_requests WHERE status = ?').get('pending').count,
+      pendingRequests: (await db.prepare('SELECT COUNT(*) as count FROM asset_requests WHERE status = ?').get('pending')).count,
 
-      upcomingMaintenance: db.prepare(`
+      upcomingMaintenance: (await db.prepare(`
         SELECT COUNT(*) as count FROM asset_maintenance
         WHERE status = 'scheduled' AND scheduled_date BETWEEN date('now') AND date('now', '+30 days')
-      `).get().count,
+      `).get()).count,
 
       licenseStats: {
-        total: db.prepare('SELECT COUNT(*) as count FROM software_licenses WHERE status = ?').get('active').count,
-        expiringSoon: db.prepare(`
+        total: (await db.prepare('SELECT COUNT(*) as count FROM software_licenses WHERE status = ?').get('active')).count,
+        expiringSoon: (await db.prepare(`
           SELECT COUNT(*) as count FROM software_licenses
           WHERE expiry_date BETWEEN date('now') AND date('now', '+90 days')
-        `).get().count,
-        utilizationRate: db.prepare(`
+        `).get()).count,
+        utilizationRate: (await db.prepare(`
           SELECT ROUND(SUM(used_seats) * 100.0 / NULLIF(SUM(total_seats), 0), 1) as rate
           FROM software_licenses WHERE status = 'active'
-        `).get().rate || 0
+        `).get()).rate || 0
       }
     };
 
@@ -397,19 +397,19 @@ router.get('/asset-analytics', authenticateToken, isAdmin, (req, res) => {
 });
 
 // Get learning analytics
-router.get('/learning-analytics', authenticateToken, isAdmin, (req, res) => {
+router.get('/learning-analytics', authenticateToken, isAdmin, async (req, res) => {
   try {
     const stats = {
-      totalCourses: db.prepare('SELECT COUNT(*) as count FROM courses WHERE is_active = 1').get().count,
-      totalEnrollments: db.prepare('SELECT COUNT(*) as count FROM course_enrollments').get().count,
-      completedEnrollments: db.prepare('SELECT COUNT(*) as count FROM course_enrollments WHERE status = ?').get('completed').count,
+      totalCourses: (await db.prepare('SELECT COUNT(*) as count FROM courses WHERE is_active = 1').get()).count,
+      totalEnrollments: (await db.prepare('SELECT COUNT(*) as count FROM course_enrollments').get()).count,
+      completedEnrollments: (await db.prepare('SELECT COUNT(*) as count FROM course_enrollments WHERE status = ?').get('completed')).count,
 
-      completionRate: db.prepare(`
+      completionRate: (await db.prepare(`
         SELECT ROUND(COUNT(CASE WHEN status = 'completed' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0), 1) as rate
         FROM course_enrollments
-      `).get().rate || 0,
+      `).get()).rate || 0,
 
-      topCourses: db.prepare(`
+      topCourses: await db.prepare(`
         SELECT c.id, c.title, c.category,
                COUNT(ce.id) as enrollments,
                COUNT(CASE WHEN ce.status = 'completed' THEN 1 END) as completions
@@ -421,7 +421,7 @@ router.get('/learning-analytics', authenticateToken, isAdmin, (req, res) => {
         LIMIT 10
       `).all(),
 
-      byCategory: db.prepare(`
+      byCategory: await db.prepare(`
         SELECT c.category, COUNT(ce.id) as enrollments
         FROM courses c
         LEFT JOIN course_enrollments ce ON c.id = ce.course_id
@@ -431,28 +431,28 @@ router.get('/learning-analytics', authenticateToken, isAdmin, (req, res) => {
       `).all(),
 
       skillsStats: {
-        totalSkills: db.prepare('SELECT COUNT(*) as count FROM skills WHERE is_active = 1').get().count,
-        employeeSkills: db.prepare('SELECT COUNT(*) as count FROM employee_skills').get().count,
-        avgSkillsPerEmployee: db.prepare(`
+        totalSkills: (await db.prepare('SELECT COUNT(*) as count FROM skills WHERE is_active = 1').get()).count,
+        employeeSkills: (await db.prepare('SELECT COUNT(*) as count FROM employee_skills').get()).count,
+        avgSkillsPerEmployee: (await db.prepare(`
           SELECT ROUND(COUNT(*) * 1.0 / NULLIF(COUNT(DISTINCT user_id), 0), 1) as avg
           FROM employee_skills
-        `).get().avg || 0
+        `).get()).avg || 0
       },
 
       certifications: {
-        total: db.prepare('SELECT COUNT(*) as count FROM employee_certifications WHERE status = ?').get('active').count,
-        expiringSoon: db.prepare(`
+        total: (await db.prepare('SELECT COUNT(*) as count FROM employee_certifications WHERE status = ?').get('active')).count,
+        expiringSoon: (await db.prepare(`
           SELECT COUNT(*) as count FROM employee_certifications
           WHERE expiry_date BETWEEN date('now') AND date('now', '+90 days')
-        `).get().count
+        `).get()).count
       },
 
       trainingSessions: {
-        upcoming: db.prepare(`
+        upcoming: (await db.prepare(`
           SELECT COUNT(*) as count FROM training_sessions
           WHERE session_date >= date('now') AND status = 'scheduled'
-        `).get().count,
-        totalRegistrations: db.prepare('SELECT COUNT(*) as count FROM training_registrations').get().count
+        `).get()).count,
+        totalRegistrations: (await db.prepare('SELECT COUNT(*) as count FROM training_registrations').get()).count
       }
     };
 
@@ -468,9 +468,9 @@ router.get('/learning-analytics', authenticateToken, isAdmin, (req, res) => {
 // ==========================================
 
 // Get saved reports
-router.get('/reports', authenticateToken, (req, res) => {
+router.get('/reports', authenticateToken, async (req, res) => {
   try {
-    const reports = db.prepare(`
+    const reports = await db.prepare(`
       SELECT sr.*, u.name as created_by_name
       FROM saved_reports sr
       JOIN users u ON sr.created_by = u.id
@@ -485,9 +485,9 @@ router.get('/reports', authenticateToken, (req, res) => {
 });
 
 // Get my reports
-router.get('/reports/my-reports', authenticateToken, (req, res) => {
+router.get('/reports/my-reports', authenticateToken, async (req, res) => {
   try {
-    const reports = db.prepare(`
+    const reports = await db.prepare(`
       SELECT * FROM saved_reports WHERE created_by = ? ORDER BY updated_at DESC
     `).all(req.user.id);
     res.json(reports);
@@ -498,17 +498,17 @@ router.get('/reports/my-reports', authenticateToken, (req, res) => {
 });
 
 // Create saved report
-router.post('/reports', authenticateToken, (req, res) => {
+router.post('/reports', authenticateToken, async (req, res) => {
   try {
     const { name, description, report_type, filters, columns, group_by, sort_by, chart_type, is_public } = req.body;
 
     const id = `rpt-${uuidv4()}`;
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO saved_reports (id, name, description, report_type, filters, columns, group_by, sort_by, chart_type, is_public, created_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, name, description, report_type, JSON.stringify(filters), JSON.stringify(columns), group_by, sort_by, chart_type, is_public ? 1 : 0, req.user.id);
 
-    const report = db.prepare('SELECT * FROM saved_reports WHERE id = ?').get(id);
+    const report = await db.prepare('SELECT * FROM saved_reports WHERE id = ?').get(id);
     res.status(201).json(report);
   } catch (error) {
     console.error('Error creating report:', error);
@@ -517,23 +517,23 @@ router.post('/reports', authenticateToken, (req, res) => {
 });
 
 // Update saved report
-router.put('/reports/:id', authenticateToken, (req, res) => {
+router.put('/reports/:id', authenticateToken, async (req, res) => {
   try {
     const { name, description, filters, columns, group_by, sort_by, chart_type, is_public } = req.body;
 
     // Verify ownership
-    const report = db.prepare('SELECT created_by FROM saved_reports WHERE id = ?').get(req.params.id);
+    const report = await db.prepare('SELECT created_by FROM saved_reports WHERE id = ?').get(req.params.id);
     if (report.created_by !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE saved_reports SET name = ?, description = ?, filters = ?, columns = ?,
       group_by = ?, sort_by = ?, chart_type = ?, is_public = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(name, description, JSON.stringify(filters), JSON.stringify(columns), group_by, sort_by, chart_type, is_public ? 1 : 0, req.params.id);
 
-    const updatedReport = db.prepare('SELECT * FROM saved_reports WHERE id = ?').get(req.params.id);
+    const updatedReport = await db.prepare('SELECT * FROM saved_reports WHERE id = ?').get(req.params.id);
     res.json(updatedReport);
   } catch (error) {
     console.error('Error updating report:', error);
@@ -542,15 +542,15 @@ router.put('/reports/:id', authenticateToken, (req, res) => {
 });
 
 // Delete saved report
-router.delete('/reports/:id', authenticateToken, (req, res) => {
+router.delete('/reports/:id', authenticateToken, async (req, res) => {
   try {
-    const report = db.prepare('SELECT created_by FROM saved_reports WHERE id = ?').get(req.params.id);
+    const report = await db.prepare('SELECT created_by FROM saved_reports WHERE id = ?').get(req.params.id);
     if (report.created_by !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    db.prepare('DELETE FROM scheduled_reports WHERE report_id = ?').run(req.params.id);
-    db.prepare('DELETE FROM saved_reports WHERE id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM scheduled_reports WHERE report_id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM saved_reports WHERE id = ?').run(req.params.id);
     res.json({ message: 'Report deleted' });
   } catch (error) {
     console.error('Error deleting report:', error);
@@ -563,7 +563,7 @@ router.delete('/reports/:id', authenticateToken, (req, res) => {
 // ==========================================
 
 // Get audit logs
-router.get('/audit-logs', authenticateToken, isAdmin, (req, res) => {
+router.get('/audit-logs', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { entity_type, user_id, action, limit = 100 } = req.query;
 
@@ -591,7 +591,7 @@ router.get('/audit-logs', authenticateToken, isAdmin, (req, res) => {
     query += ` ORDER BY al.created_at DESC LIMIT ?`;
     params.push(parseInt(limit));
 
-    const logs = db.prepare(query).all(...params);
+    const logs = await db.prepare(query).all(...params);
     res.json(logs);
   } catch (error) {
     console.error('Error fetching audit logs:', error);
@@ -604,18 +604,18 @@ router.get('/audit-logs', authenticateToken, isAdmin, (req, res) => {
 // ==========================================
 
 // Get my preferences
-router.get('/preferences', authenticateToken, (req, res) => {
+router.get('/preferences', authenticateToken, async (req, res) => {
   try {
-    let prefs = db.prepare('SELECT * FROM user_preferences WHERE user_id = ?').get(req.user.id);
+    let prefs = await db.prepare('SELECT * FROM user_preferences WHERE user_id = ?').get(req.user.id);
 
     if (!prefs) {
       // Create default preferences
       const id = `pref-${uuidv4()}`;
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO user_preferences (id, user_id)
         VALUES (?, ?)
       `).run(id, req.user.id);
-      prefs = db.prepare('SELECT * FROM user_preferences WHERE user_id = ?').get(req.user.id);
+      prefs = await db.prepare('SELECT * FROM user_preferences WHERE user_id = ?').get(req.user.id);
     }
 
     res.json(prefs);
@@ -626,15 +626,15 @@ router.get('/preferences', authenticateToken, (req, res) => {
 });
 
 // Update my preferences
-router.put('/preferences', authenticateToken, (req, res) => {
+router.put('/preferences', authenticateToken, async (req, res) => {
   try {
     const { theme, language, timezone, date_format, time_format, notifications_email, notifications_push, notifications_slack, dashboard_layout, sidebar_collapsed } = req.body;
 
     // Check if preferences exist
-    const existing = db.prepare('SELECT id FROM user_preferences WHERE user_id = ?').get(req.user.id);
+    const existing = await db.prepare('SELECT id FROM user_preferences WHERE user_id = ?').get(req.user.id);
 
     if (existing) {
-      db.prepare(`
+      await db.prepare(`
         UPDATE user_preferences SET theme = COALESCE(?, theme), language = COALESCE(?, language),
         timezone = COALESCE(?, timezone), date_format = COALESCE(?, date_format),
         time_format = COALESCE(?, time_format), notifications_email = COALESCE(?, notifications_email),
@@ -645,13 +645,13 @@ router.put('/preferences', authenticateToken, (req, res) => {
       `).run(theme, language, timezone, date_format, time_format, notifications_email, notifications_push, notifications_slack, dashboard_layout, sidebar_collapsed, req.user.id);
     } else {
       const id = `pref-${uuidv4()}`;
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO user_preferences (id, user_id, theme, language, timezone, date_format, time_format, notifications_email, notifications_push, notifications_slack, dashboard_layout, sidebar_collapsed)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(id, req.user.id, theme, language, timezone, date_format, time_format, notifications_email, notifications_push, notifications_slack, dashboard_layout, sidebar_collapsed);
     }
 
-    const prefs = db.prepare('SELECT * FROM user_preferences WHERE user_id = ?').get(req.user.id);
+    const prefs = await db.prepare('SELECT * FROM user_preferences WHERE user_id = ?').get(req.user.id);
     res.json(prefs);
   } catch (error) {
     console.error('Error updating preferences:', error);
@@ -664,9 +664,9 @@ router.put('/preferences', authenticateToken, (req, res) => {
 // ==========================================
 
 // Get my widgets
-router.get('/widgets', authenticateToken, (req, res) => {
+router.get('/widgets', authenticateToken, async (req, res) => {
   try {
-    const widgets = db.prepare(`
+    const widgets = await db.prepare(`
       SELECT * FROM dashboard_widgets WHERE user_id = ? AND is_visible = 1
       ORDER BY position_y, position_x
     `).all(req.user.id);
@@ -678,12 +678,12 @@ router.get('/widgets', authenticateToken, (req, res) => {
 });
 
 // Save widget layout
-router.post('/widgets', authenticateToken, (req, res) => {
+router.post('/widgets', authenticateToken, async (req, res) => {
   try {
     const { widgets } = req.body;
 
     // Delete existing widgets
-    db.prepare('DELETE FROM dashboard_widgets WHERE user_id = ?').run(req.user.id);
+    await db.prepare('DELETE FROM dashboard_widgets WHERE user_id = ?').run(req.user.id);
 
     // Insert new widgets
     const insert = db.prepare(`
@@ -692,7 +692,7 @@ router.post('/widgets', authenticateToken, (req, res) => {
     `);
 
     for (const widget of widgets) {
-      insert.run(`widget-${uuidv4()}`, req.user.id, widget.widget_type, widget.title, JSON.stringify(widget.config || {}), widget.position_x, widget.position_y, widget.width || 1, widget.height || 1, widget.is_visible !== false ? 1 : 0);
+      await insert.run(`widget-${uuidv4()}`, req.user.id, widget.widget_type, widget.title, JSON.stringify(widget.config || {}), widget.position_x, widget.position_y, widget.width || 1, widget.height || 1, widget.is_visible !== false ? 1 : 0);
     }
 
     res.json({ message: 'Widgets saved' });

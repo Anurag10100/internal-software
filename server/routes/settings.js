@@ -5,9 +5,9 @@ const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const router = express.Router();
 
 // Get HRMS settings
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
-    const settings = db.prepare('SELECT * FROM hrms_settings WHERE id = 1').get();
+    const settings = await db.prepare('SELECT * FROM hrms_settings WHERE id = 1').get();
 
     if (!settings) {
       return res.json({
@@ -38,11 +38,11 @@ router.get('/', authenticateToken, (req, res) => {
 });
 
 // Update HRMS settings (admin only)
-router.put('/', authenticateToken, requireAdmin, (req, res) => {
+router.put('/', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { lateTime, halfDayTime, locationOptions, leaveTypes, weeklyOffSettings, holidays } = req.body;
 
-    const existingSettings = db.prepare('SELECT * FROM hrms_settings WHERE id = 1').get();
+    const existingSettings = await db.prepare('SELECT * FROM hrms_settings WHERE id = 1').get();
     const existingJson = existingSettings?.settings_json ? JSON.parse(existingSettings.settings_json) : {};
 
     const newSettingsJson = JSON.stringify({
@@ -53,7 +53,7 @@ router.put('/', authenticateToken, requireAdmin, (req, res) => {
     });
 
     if (existingSettings) {
-      db.prepare(`
+      await db.prepare(`
         UPDATE hrms_settings SET
           late_time = COALESCE(?, late_time),
           half_day_time = COALESCE(?, half_day_time),
@@ -61,13 +61,13 @@ router.put('/', authenticateToken, requireAdmin, (req, res) => {
         WHERE id = 1
       `).run(lateTime, halfDayTime, newSettingsJson);
     } else {
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO hrms_settings (id, late_time, half_day_time, settings_json)
         VALUES (1, ?, ?, ?)
       `).run(lateTime || '10:30 AM', halfDayTime || '11:00 AM', newSettingsJson);
     }
 
-    const updatedSettings = db.prepare('SELECT * FROM hrms_settings WHERE id = 1').get();
+    const updatedSettings = await db.prepare('SELECT * FROM hrms_settings WHERE id = 1').get();
     const updatedJson = JSON.parse(updatedSettings.settings_json);
 
     res.json({
