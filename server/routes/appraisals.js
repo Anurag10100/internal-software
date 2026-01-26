@@ -1,8 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { db } = require('../config/database');
+const { createClient } = require('@supabase/supabase-js');
 const { authenticateToken } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 // ==========================================
 // APPRAISAL CYCLES
@@ -11,14 +16,19 @@ const { v4: uuidv4 } = require('uuid');
 // Get all cycles
 router.get('/cycles', authenticateToken, async (req, res) => {
   try {
-    const cycles = await db.prepare(`
-      SELECT ac.*, u.name as created_by_name
-      FROM appraisal_cycles ac
-      LEFT JOIN users u ON ac.created_by = u.id
-      ORDER BY ac.start_date DESC
-    `).all();
+    const { data: cycles, error } = await supabase
+      .from('appraisal_cycles')
+      .select('*, creator:users!created_by(name)')
+      .order('start_date', { ascending: false });
 
-    res.json(cycles);
+    if (error) throw error;
+
+    const formatted = cycles.map(c => ({
+      ...c,
+      created_by_name: c.creator?.name
+    }));
+
+    res.json(formatted);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -30,12 +40,13 @@ router.post('/cycles', authenticateToken, async (req, res) => {
     const { name, type, start_date, end_date } = req.body;
     const id = `cycle-${uuidv4()}`;
 
-    await db.prepare(`
-      INSERT INTO appraisal_cycles (id, name, type, start_date, end_date, created_by)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, name, type, start_date, end_date, req.user.id);
+    const { data: cycle, error } = await supabase
+      .from('appraisal_cycles')
+      .insert({ id, name, type, start_date, end_date, created_by: req.user.id })
+      .select()
+      .single();
 
-    const cycle = await db.prepare('SELECT * FROM appraisal_cycles WHERE id = ?').get(id);
+    if (error) throw error;
     res.status(201).json(cycle);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -47,17 +58,21 @@ router.put('/cycles/:id', authenticateToken, async (req, res) => {
   try {
     const { name, type, start_date, end_date, status } = req.body;
 
-    await db.prepare(`
-      UPDATE appraisal_cycles
-      SET name = COALESCE(?, name),
-          type = COALESCE(?, type),
-          start_date = COALESCE(?, start_date),
-          end_date = COALESCE(?, end_date),
-          status = COALESCE(?, status)
-      WHERE id = ?
-    `).run(name, type, start_date, end_date, status, req.params.id);
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (type !== undefined) updateData.type = type;
+    if (start_date !== undefined) updateData.start_date = start_date;
+    if (end_date !== undefined) updateData.end_date = end_date;
+    if (status !== undefined) updateData.status = status;
 
-    const cycle = await db.prepare('SELECT * FROM appraisal_cycles WHERE id = ?').get(req.params.id);
+    const { data: cycle, error } = await supabase
+      .from('appraisal_cycles')
+      .update(updateData)
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
     res.json(cycle);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -67,31 +82,47 @@ router.put('/cycles/:id', authenticateToken, async (req, res) => {
 // Activate cycle and create appraisals for all employees
 router.post('/cycles/:id/activate', authenticateToken, async (req, res) => {
   try {
-    const cycle = await db.prepare('SELECT * FROM appraisal_cycles WHERE id = ?').get(req.params.id);
+    const { data: cycle } = await supabase
+      .from('appraisal_cycles')
+      .select()
+      .eq('id', req.params.id)
+      .single();
 
     if (!cycle) {
       return res.status(404).json({ error: 'Cycle not found' });
     }
 
-    // Update cycle status
-    await db.prepare(`UPDATE appraisal_cycles SET status = 'active' WHERE id = ?`).run(req.params.id);
+    await supabase
+      .from('appraisal_cycles')
+      .update({ status: 'active' })
+      .eq('id', req.params.id);
 
-    // Get all employees (non-admin)
-    const employees = await db.prepare(`SELECT id FROM users WHERE role = 'employee'`).all();
+    const { data: employees } = await supabase
+      .from('users')
+      .select('id')
+      .eq('role', 'employee');
 
-    // Get admin as default manager
-    const admin = await db.prepare(`SELECT id FROM users WHERE role = 'admin' LIMIT 1`).get();
+    const { data: admin } = await supabase
+      .from('users')
+      .select('id')
+      .eq('role', 'admin')
+      .limit(1)
+      .single();
 
-    // Create appraisals for each employee
-    for (const emp of employees) {
+    for (const emp of employees || []) {
       const appraisalId = `appr-${uuidv4()}`;
-      await db.prepare(`
-        INSERT INTO appraisals (id, cycle_id, employee_id, manager_id, status)
-        VALUES (?, ?, ?, ?, 'pending')
-      `).run(appraisalId, req.params.id, emp.id, admin.id);
+      await supabase
+        .from('appraisals')
+        .insert({
+          id: appraisalId,
+          cycle_id: req.params.id,
+          employee_id: emp.id,
+          manager_id: admin.id,
+          status: 'pending'
+        });
     }
 
-    res.json({ message: 'Cycle activated', appraisalsCreated: employees.length });
+    res.json({ message: 'Cycle activated', appraisalsCreated: employees?.length || 0 });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -104,19 +135,30 @@ router.post('/cycles/:id/activate', authenticateToken, async (req, res) => {
 // Get all appraisals (admin)
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const appraisals = await db.prepare(`
-      SELECT a.*,
-             e.name as employee_name, e.email as employee_email, e.department, e.designation,
-             m.name as manager_name,
-             c.name as cycle_name, c.type as cycle_type
-      FROM appraisals a
-      JOIN users e ON a.employee_id = e.id
-      JOIN users m ON a.manager_id = m.id
-      JOIN appraisal_cycles c ON a.cycle_id = c.id
-      ORDER BY a.created_at DESC
-    `).all();
+    const { data: appraisals, error } = await supabase
+      .from('appraisals')
+      .select(`
+        *,
+        employee:users!employee_id(name, email, department, designation),
+        manager:users!manager_id(name),
+        cycle:appraisal_cycles!cycle_id(name, type)
+      `)
+      .order('created_at', { ascending: false });
 
-    res.json(appraisals);
+    if (error) throw error;
+
+    const formatted = appraisals.map(a => ({
+      ...a,
+      employee_name: a.employee?.name,
+      employee_email: a.employee?.email,
+      department: a.employee?.department,
+      designation: a.employee?.designation,
+      manager_name: a.manager?.name,
+      cycle_name: a.cycle?.name,
+      cycle_type: a.cycle?.type
+    }));
+
+    res.json(formatted);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -125,20 +167,31 @@ router.get('/', authenticateToken, async (req, res) => {
 // Get my appraisals
 router.get('/my-appraisals', authenticateToken, async (req, res) => {
   try {
-    const appraisals = await db.prepare(`
-      SELECT a.*,
-             e.name as employee_name, e.email as employee_email, e.department, e.designation,
-             m.name as manager_name,
-             c.name as cycle_name, c.type as cycle_type
-      FROM appraisals a
-      JOIN users e ON a.employee_id = e.id
-      JOIN users m ON a.manager_id = m.id
-      JOIN appraisal_cycles c ON a.cycle_id = c.id
-      WHERE a.employee_id = ?
-      ORDER BY a.created_at DESC
-    `).all(req.user.id);
+    const { data: appraisals, error } = await supabase
+      .from('appraisals')
+      .select(`
+        *,
+        employee:users!employee_id(name, email, department, designation),
+        manager:users!manager_id(name),
+        cycle:appraisal_cycles!cycle_id(name, type)
+      `)
+      .eq('employee_id', req.user.id)
+      .order('created_at', { ascending: false });
 
-    res.json(appraisals);
+    if (error) throw error;
+
+    const formatted = appraisals.map(a => ({
+      ...a,
+      employee_name: a.employee?.name,
+      employee_email: a.employee?.email,
+      department: a.employee?.department,
+      designation: a.employee?.designation,
+      manager_name: a.manager?.name,
+      cycle_name: a.cycle?.name,
+      cycle_type: a.cycle?.type
+    }));
+
+    res.json(formatted);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -147,18 +200,30 @@ router.get('/my-appraisals', authenticateToken, async (req, res) => {
 // Get appraisals to review (as manager)
 router.get('/to-review', authenticateToken, async (req, res) => {
   try {
-    const appraisals = await db.prepare(`
-      SELECT a.*,
-             e.name as employee_name, e.email as employee_email, e.department, e.designation,
-             c.name as cycle_name, c.type as cycle_type
-      FROM appraisals a
-      JOIN users e ON a.employee_id = e.id
-      JOIN appraisal_cycles c ON a.cycle_id = c.id
-      WHERE a.manager_id = ? AND a.status IN ('pending', 'self_review')
-      ORDER BY a.created_at DESC
-    `).all(req.user.id);
+    const { data: appraisals, error } = await supabase
+      .from('appraisals')
+      .select(`
+        *,
+        employee:users!employee_id(name, email, department, designation),
+        cycle:appraisal_cycles!cycle_id(name, type)
+      `)
+      .eq('manager_id', req.user.id)
+      .in('status', ['pending', 'self_review'])
+      .order('created_at', { ascending: false });
 
-    res.json(appraisals);
+    if (error) throw error;
+
+    const formatted = appraisals.map(a => ({
+      ...a,
+      employee_name: a.employee?.name,
+      employee_email: a.employee?.email,
+      department: a.employee?.department,
+      designation: a.employee?.designation,
+      cycle_name: a.cycle?.name,
+      cycle_type: a.cycle?.type
+    }));
+
+    res.json(formatted);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -167,39 +232,50 @@ router.get('/to-review', authenticateToken, async (req, res) => {
 // Get single appraisal
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
-    const appraisal = await db.prepare(`
-      SELECT a.*,
-             e.name as employee_name, e.email as employee_email, e.department, e.designation,
-             m.name as manager_name,
-             c.name as cycle_name, c.type as cycle_type, c.start_date as cycle_start, c.end_date as cycle_end
-      FROM appraisals a
-      JOIN users e ON a.employee_id = e.id
-      JOIN users m ON a.manager_id = m.id
-      JOIN appraisal_cycles c ON a.cycle_id = c.id
-      WHERE a.id = ?
-    `).get(req.params.id);
+    const { data: appraisal, error } = await supabase
+      .from('appraisals')
+      .select(`
+        *,
+        employee:users!employee_id(name, email, department, designation),
+        manager:users!manager_id(name),
+        cycle:appraisal_cycles!cycle_id(name, type, start_date, end_date)
+      `)
+      .eq('id', req.params.id)
+      .single();
 
-    if (!appraisal) {
+    if (error || !appraisal) {
       return res.status(404).json({ error: 'Appraisal not found' });
     }
 
-    // Get linked goals
-    const goals = await db.prepare(`
-      SELECT * FROM goals WHERE appraisal_id = ? OR (user_id = ? AND appraisal_id IS NULL)
-    `).all(req.params.id, appraisal.employee_id);
+    const { data: goals } = await supabase
+      .from('goals')
+      .select()
+      .or(`appraisal_id.eq.${req.params.id},and(user_id.eq.${appraisal.employee_id},appraisal_id.is.null)`);
 
-    // Get 360 feedback
-    const feedback = await db.prepare(`
-      SELECT f.*, u.name as reviewer_name
-      FROM feedback_360 f
-      LEFT JOIN users u ON f.reviewer_id = u.id
-      WHERE f.appraisal_id = ?
-    `).all(req.params.id);
+    const { data: feedback } = await supabase
+      .from('feedback_360')
+      .select('*, reviewer:users!reviewer_id(name)')
+      .eq('appraisal_id', req.params.id);
 
-    appraisal.goals = goals;
-    appraisal.feedback_360 = feedback;
+    const formatted = {
+      ...appraisal,
+      employee_name: appraisal.employee?.name,
+      employee_email: appraisal.employee?.email,
+      department: appraisal.employee?.department,
+      designation: appraisal.employee?.designation,
+      manager_name: appraisal.manager?.name,
+      cycle_name: appraisal.cycle?.name,
+      cycle_type: appraisal.cycle?.type,
+      cycle_start: appraisal.cycle?.start_date,
+      cycle_end: appraisal.cycle?.end_date,
+      goals: goals || [],
+      feedback_360: (feedback || []).map(f => ({
+        ...f,
+        reviewer_name: f.reviewer?.name
+      }))
+    };
 
-    res.json(appraisal);
+    res.json(formatted);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -210,13 +286,20 @@ router.post('/:id/self-review', authenticateToken, async (req, res) => {
   try {
     const { self_rating, self_comments } = req.body;
 
-    await db.prepare(`
-      UPDATE appraisals
-      SET self_rating = ?, self_comments = ?, status = 'self_review', submitted_at = ?
-      WHERE id = ? AND employee_id = ?
-    `).run(self_rating, self_comments, new Date().toISOString(), req.params.id, req.user.id);
+    const { data: appraisal, error } = await supabase
+      .from('appraisals')
+      .update({
+        self_rating,
+        self_comments,
+        status: 'self_review',
+        submitted_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .eq('employee_id', req.user.id)
+      .select()
+      .single();
 
-    const appraisal = await db.prepare('SELECT * FROM appraisals WHERE id = ?').get(req.params.id);
+    if (error) throw error;
     res.json(appraisal);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -228,13 +311,21 @@ router.post('/:id/manager-review', authenticateToken, async (req, res) => {
   try {
     const { manager_rating, manager_comments, final_rating } = req.body;
 
-    await db.prepare(`
-      UPDATE appraisals
-      SET manager_rating = ?, manager_comments = ?, final_rating = ?, status = 'completed', reviewed_at = ?
-      WHERE id = ? AND manager_id = ?
-    `).run(manager_rating, manager_comments, final_rating, new Date().toISOString(), req.params.id, req.user.id);
+    const { data: appraisal, error } = await supabase
+      .from('appraisals')
+      .update({
+        manager_rating,
+        manager_comments,
+        final_rating,
+        status: 'completed',
+        reviewed_at: new Date().toISOString()
+      })
+      .eq('id', req.params.id)
+      .eq('manager_id', req.user.id)
+      .select()
+      .single();
 
-    const appraisal = await db.prepare('SELECT * FROM appraisals WHERE id = ?').get(req.params.id);
+    if (error) throw error;
     res.json(appraisal);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -248,14 +339,20 @@ router.post('/:id/manager-review', authenticateToken, async (req, res) => {
 // Get all goals
 router.get('/goals/all', authenticateToken, async (req, res) => {
   try {
-    const goals = await db.prepare(`
-      SELECT g.*, u.name as user_name, u.department
-      FROM goals g
-      JOIN users u ON g.user_id = u.id
-      ORDER BY g.created_at DESC
-    `).all();
+    const { data: goals, error } = await supabase
+      .from('goals')
+      .select('*, user:users!user_id(name, department)')
+      .order('created_at', { ascending: false });
 
-    res.json(goals);
+    if (error) throw error;
+
+    const formatted = goals.map(g => ({
+      ...g,
+      user_name: g.user?.name,
+      department: g.user?.department
+    }));
+
+    res.json(formatted);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -264,10 +361,13 @@ router.get('/goals/all', authenticateToken, async (req, res) => {
 // Get my goals
 router.get('/goals/my-goals', authenticateToken, async (req, res) => {
   try {
-    const goals = await db.prepare(`
-      SELECT * FROM goals WHERE user_id = ? ORDER BY created_at DESC
-    `).all(req.user.id);
+    const { data: goals, error } = await supabase
+      .from('goals')
+      .select()
+      .eq('user_id', req.user.id)
+      .order('created_at', { ascending: false });
 
+    if (error) throw error;
     res.json(goals);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -280,12 +380,22 @@ router.post('/goals', authenticateToken, async (req, res) => {
     const { user_id, appraisal_id, title, description, category, target_date, weightage } = req.body;
     const id = `goal-${uuidv4()}`;
 
-    await db.prepare(`
-      INSERT INTO goals (id, user_id, appraisal_id, title, description, category, target_date, weightage)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, user_id || req.user.id, appraisal_id || null, title, description, category, target_date, weightage || 0);
+    const { data: goal, error } = await supabase
+      .from('goals')
+      .insert({
+        id,
+        user_id: user_id || req.user.id,
+        appraisal_id: appraisal_id || null,
+        title,
+        description,
+        category,
+        target_date,
+        weightage: weightage || 0
+      })
+      .select()
+      .single();
 
-    const goal = await db.prepare('SELECT * FROM goals WHERE id = ?').get(id);
+    if (error) throw error;
     res.status(201).json(goal);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -297,21 +407,25 @@ router.put('/goals/:id', authenticateToken, async (req, res) => {
   try {
     const { title, description, category, target_date, weightage, progress, status, self_rating, manager_rating } = req.body;
 
-    await db.prepare(`
-      UPDATE goals
-      SET title = COALESCE(?, title),
-          description = COALESCE(?, description),
-          category = COALESCE(?, category),
-          target_date = COALESCE(?, target_date),
-          weightage = COALESCE(?, weightage),
-          progress = COALESCE(?, progress),
-          status = COALESCE(?, status),
-          self_rating = COALESCE(?, self_rating),
-          manager_rating = COALESCE(?, manager_rating)
-      WHERE id = ?
-    `).run(title, description, category, target_date, weightage, progress, status, self_rating, manager_rating, req.params.id);
+    const updateData = {};
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
+    if (category !== undefined) updateData.category = category;
+    if (target_date !== undefined) updateData.target_date = target_date;
+    if (weightage !== undefined) updateData.weightage = weightage;
+    if (progress !== undefined) updateData.progress = progress;
+    if (status !== undefined) updateData.status = status;
+    if (self_rating !== undefined) updateData.self_rating = self_rating;
+    if (manager_rating !== undefined) updateData.manager_rating = manager_rating;
 
-    const goal = await db.prepare('SELECT * FROM goals WHERE id = ?').get(req.params.id);
+    const { data: goal, error } = await supabase
+      .from('goals')
+      .update(updateData)
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
     res.json(goal);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -321,7 +435,12 @@ router.put('/goals/:id', authenticateToken, async (req, res) => {
 // Delete goal
 router.delete('/goals/:id', authenticateToken, async (req, res) => {
   try {
-    await db.prepare('DELETE FROM goals WHERE id = ?').run(req.params.id);
+    const { error } = await supabase
+      .from('goals')
+      .delete()
+      .eq('id', req.params.id);
+
+    if (error) throw error;
     res.json({ message: 'Goal deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -335,14 +454,19 @@ router.delete('/goals/:id', authenticateToken, async (req, res) => {
 // Get feedback for appraisal
 router.get('/:id/feedback', authenticateToken, async (req, res) => {
   try {
-    const feedback = await db.prepare(`
-      SELECT f.*, u.name as reviewer_name
-      FROM feedback_360 f
-      LEFT JOIN users u ON f.reviewer_id = u.id
-      WHERE f.appraisal_id = ?
-    `).all(req.params.id);
+    const { data: feedback, error } = await supabase
+      .from('feedback_360')
+      .select('*, reviewer:users!reviewer_id(name)')
+      .eq('appraisal_id', req.params.id);
 
-    res.json(feedback);
+    if (error) throw error;
+
+    const formatted = feedback.map(f => ({
+      ...f,
+      reviewer_name: f.reviewer?.name
+    }));
+
+    res.json(formatted);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -354,12 +478,24 @@ router.post('/:id/feedback', authenticateToken, async (req, res) => {
     const { reviewer_type, rating, strengths, improvements, comments, is_anonymous } = req.body;
     const id = `fb-${uuidv4()}`;
 
-    await db.prepare(`
-      INSERT INTO feedback_360 (id, appraisal_id, reviewer_id, reviewer_type, rating, strengths, improvements, comments, is_anonymous, submitted_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, req.params.id, req.user.id, reviewer_type, rating, strengths, improvements, comments, is_anonymous ? 1 : 0, new Date().toISOString());
+    const { data: feedback, error } = await supabase
+      .from('feedback_360')
+      .insert({
+        id,
+        appraisal_id: req.params.id,
+        reviewer_id: req.user.id,
+        reviewer_type,
+        rating,
+        strengths,
+        improvements,
+        comments,
+        is_anonymous: is_anonymous ? 1 : 0,
+        submitted_at: new Date().toISOString()
+      })
+      .select()
+      .single();
 
-    const feedback = await db.prepare('SELECT * FROM feedback_360 WHERE id = ?').get(id);
+    if (error) throw error;
     res.status(201).json(feedback);
   } catch (error) {
     res.status(500).json({ error: error.message });
