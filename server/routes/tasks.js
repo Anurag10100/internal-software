@@ -4,14 +4,32 @@ const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+// Create Supabase client lazily to ensure env vars are loaded
+let _supabase = null;
+function getSupabase() {
+  if (_supabase) return _supabase;
+
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  console.log('[Tasks] Supabase config check:', {
+    hasUrl: !!url,
+    hasKey: !!key,
+    dbMode: process.env.DATABASE_MODE
+  });
+
+  if (!url || !key) {
+    throw new Error('Supabase not configured - missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+  }
+
+  _supabase = createClient(url, key);
+  return _supabase;
+}
 
 // Get all tasks (with user info)
 router.get('/', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabase();
     const { data: tasks, error } = await supabase
       .from('tasks')
       .select('*, assignedBy:users!assigned_by_user_id(name), assignedTo:users!assigned_to_user_id(name)')
@@ -45,6 +63,7 @@ router.get('/', authenticateToken, async (req, res) => {
 // Get my tasks (assigned to me)
 router.get('/my-tasks', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabase();
     const { data: tasks, error } = await supabase
       .from('tasks')
       .select('*, assignedBy:users!assigned_by_user_id(name)')
@@ -78,6 +97,7 @@ router.get('/my-tasks', authenticateToken, async (req, res) => {
 // Get delegated tasks (assigned by me)
 router.get('/delegated', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabase();
     const { data: tasks, error } = await supabase
       .from('tasks')
       .select('*, assignedTo:users!assigned_to_user_id(name)')
@@ -112,7 +132,10 @@ router.get('/delegated', authenticateToken, async (req, res) => {
 // Create task
 router.post('/', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabase();
     const { title, description, assignedTo, dueDate, dueTime, priority, tags } = req.body;
+
+    console.log('Create task request:', { title, assignedTo, dueDate, dueTime, userId: req.user.id });
 
     if (!title || !assignedTo || !dueDate || !dueTime) {
       return res.status(400).json({ error: 'Title, assignedTo, dueDate, and dueTime are required' });
@@ -121,24 +144,33 @@ router.post('/', authenticateToken, async (req, res) => {
     const taskId = `task-${Date.now()}`;
     const tagsString = Array.isArray(tags) ? tags.join(',') : (tags || '');
 
+    const insertData = {
+      id: taskId,
+      title,
+      description: description || '',
+      assigned_by_user_id: req.user.id,
+      assigned_to_user_id: assignedTo,
+      due_date: dueDate,
+      due_time: dueTime,
+      status: 'pending',
+      priority: priority || 'medium',
+      tags: tagsString
+    };
+
+    console.log('Inserting task:', insertData);
+
     const { data: task, error } = await supabase
       .from('tasks')
-      .insert({
-        id: taskId,
-        title,
-        description: description || '',
-        assigned_by_user_id: req.user.id,
-        assigned_to_user_id: assignedTo,
-        due_date: dueDate,
-        due_time: dueTime,
-        status: 'pending',
-        priority: priority || 'medium',
-        tags: tagsString
-      })
+      .insert(insertData)
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Supabase insert error:', error);
+      return res.status(500).json({ error: error.message || 'Failed to create task' });
+    }
+
+    console.log('Task created:', task);
 
     res.status(201).json({
       message: 'Task created successfully',
@@ -149,13 +181,14 @@ router.post('/', authenticateToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Create task error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
 
 // Update task
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabase();
     const { id } = req.params;
     const { title, description, status, priority, dueDate, dueTime, tags } = req.body;
 
@@ -205,6 +238,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 // Delete task
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabase();
     const { id } = req.params;
 
     const { data: existingTask, error: findError } = await supabase
