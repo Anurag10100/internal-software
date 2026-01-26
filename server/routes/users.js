@@ -6,9 +6,9 @@ const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const router = express.Router();
 
 // Get all users
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
-    const users = db.prepare(`
+    const users = await db.prepare(`
       SELECT id, name, email, department, designation, role, avatar, created_at
       FROM users
       ORDER BY name
@@ -22,9 +22,9 @@ router.get('/', authenticateToken, (req, res) => {
 });
 
 // Get team members with additional info
-router.get('/team', authenticateToken, (req, res) => {
+router.get('/team', authenticateToken, async (req, res) => {
   try {
-    const members = db.prepare(`
+    const members = await db.prepare(`
       SELECT
         u.id,
         u.name,
@@ -62,7 +62,7 @@ router.get('/team', authenticateToken, (req, res) => {
 });
 
 // Add team member (admin only)
-router.post('/team', authenticateToken, requireAdmin, (req, res) => {
+router.post('/team', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { name, email, password, department, designation, profile, role = 'employee' } = req.body;
 
@@ -70,7 +70,7 @@ router.post('/team', authenticateToken, requireAdmin, (req, res) => {
       return res.status(400).json({ error: 'Name, email, password, and department are required' });
     }
 
-    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    const existingUser = await db.prepare('SELECT id FROM users WHERE email = ?').get(email);
     if (existingUser) {
       return res.status(400).json({ error: 'Email already registered' });
     }
@@ -78,12 +78,12 @@ router.post('/team', authenticateToken, requireAdmin, (req, res) => {
     const hashedPassword = bcrypt.hashSync(password, 10);
     const userId = `user-${Date.now()}`;
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO users (id, name, email, password, department, designation, role)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(userId, name, email, hashedPassword, department, designation || '', role);
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO team_members (id, user_id, profile, in_probation, status)
       VALUES (?, ?, ?, 1, 'Active')
     `).run(`tm-${Date.now()}`, userId, profile || 'Standard');
@@ -109,18 +109,18 @@ router.post('/team', authenticateToken, requireAdmin, (req, res) => {
 });
 
 // Update team member (admin only)
-router.put('/team/:id', authenticateToken, requireAdmin, (req, res) => {
+router.put('/team/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, email, department, designation, profile, status, inProbation } = req.body;
 
-    const existingUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    const existingUser = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     if (!existingUser) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     // Update users table
-    db.prepare(`
+    await db.prepare(`
       UPDATE users SET
         name = COALESCE(?, name),
         email = COALESCE(?, email),
@@ -131,7 +131,7 @@ router.put('/team/:id', authenticateToken, requireAdmin, (req, res) => {
 
     // Update team_members table
     if (profile !== undefined || status !== undefined || inProbation !== undefined) {
-      db.prepare(`
+      await db.prepare(`
         UPDATE team_members SET
           profile = COALESCE(?, profile),
           status = COALESCE(?, status),
@@ -140,7 +140,7 @@ router.put('/team/:id', authenticateToken, requireAdmin, (req, res) => {
       `).run(profile, status, inProbation !== undefined ? (inProbation ? 1 : 0) : undefined, id);
     }
 
-    const updatedUser = db.prepare(`
+    const updatedUser = await db.prepare(`
       SELECT
         u.id, u.name, u.email, u.department, u.designation, u.role,
         tm.profile, tm.in_probation, tm.status
@@ -170,11 +170,11 @@ router.put('/team/:id', authenticateToken, requireAdmin, (req, res) => {
 });
 
 // Delete team member (admin only)
-router.delete('/team/:id', authenticateToken, requireAdmin, (req, res) => {
+router.delete('/team/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const existingUser = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    const existingUser = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     if (!existingUser) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -185,15 +185,15 @@ router.delete('/team/:id', authenticateToken, requireAdmin, (req, res) => {
     }
 
     // Delete from team_members first (foreign key)
-    db.prepare('DELETE FROM team_members WHERE user_id = ?').run(id);
+    await db.prepare('DELETE FROM team_members WHERE user_id = ?').run(id);
     // Delete related tasks
-    db.prepare('DELETE FROM tasks WHERE assigned_to_user_id = ? OR assigned_by_user_id = ?').run(id, id);
+    await db.prepare('DELETE FROM tasks WHERE assigned_to_user_id = ? OR assigned_by_user_id = ?').run(id, id);
     // Delete related leave requests
-    db.prepare('DELETE FROM leave_requests WHERE user_id = ?').run(id);
+    await db.prepare('DELETE FROM leave_requests WHERE user_id = ?').run(id);
     // Delete related check-ins
-    db.prepare('DELETE FROM check_ins WHERE user_id = ?').run(id);
+    await db.prepare('DELETE FROM check_ins WHERE user_id = ?').run(id);
     // Delete user
-    db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    await db.prepare('DELETE FROM users WHERE id = ?').run(id);
 
     res.json({ message: 'Team member deleted successfully' });
   } catch (error) {
@@ -203,18 +203,18 @@ router.delete('/team/:id', authenticateToken, requireAdmin, (req, res) => {
 });
 
 // Update user profile (self)
-router.put('/profile', authenticateToken, (req, res) => {
+router.put('/profile', authenticateToken, async (req, res) => {
   try {
     const { name, avatar } = req.body;
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE users SET
         name = COALESCE(?, name),
         avatar = COALESCE(?, avatar)
       WHERE id = ?
     `).run(name, avatar, req.user.id);
 
-    const updatedUser = db.prepare(`
+    const updatedUser = await db.prepare(`
       SELECT id, name, email, department, designation, role, avatar
       FROM users WHERE id = ?
     `).get(req.user.id);

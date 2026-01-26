@@ -5,9 +5,9 @@ const { authenticateToken } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
 
 // Get all probations (admin only)
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
-    const probations = db.prepare(`
+    const probations = await db.prepare(`
       SELECT p.*, u.name as user_name, u.email as user_email, u.department, u.designation,
              c.name as confirmed_by_name
       FROM probations p
@@ -23,9 +23,9 @@ router.get('/', authenticateToken, (req, res) => {
 });
 
 // Get active probations
-router.get('/active', authenticateToken, (req, res) => {
+router.get('/active', authenticateToken, async (req, res) => {
   try {
-    const probations = db.prepare(`
+    const probations = await db.prepare(`
       SELECT p.*, u.name as user_name, u.email as user_email, u.department, u.designation
       FROM probations p
       JOIN users u ON p.user_id = u.id
@@ -40,9 +40,9 @@ router.get('/active', authenticateToken, (req, res) => {
 });
 
 // Get current user's probation
-router.get('/my-probation', authenticateToken, (req, res) => {
+router.get('/my-probation', authenticateToken, async (req, res) => {
   try {
-    const probation = db.prepare(`
+    const probation = await db.prepare(`
       SELECT p.*, u.name as user_name, u.email as user_email, u.department, u.designation
       FROM probations p
       JOIN users u ON p.user_id = u.id
@@ -53,12 +53,12 @@ router.get('/my-probation', authenticateToken, (req, res) => {
 
     if (probation) {
       // Get checklists
-      const checklists = db.prepare(`
+      const checklists = await db.prepare(`
         SELECT * FROM probation_checklists WHERE probation_id = ?
       `).all(probation.id);
 
       // Get reviews
-      const reviews = db.prepare(`
+      const reviews = await db.prepare(`
         SELECT pr.*, u.name as reviewer_name
         FROM probation_reviews pr
         JOIN users u ON pr.reviewer_id = u.id
@@ -77,9 +77,9 @@ router.get('/my-probation', authenticateToken, (req, res) => {
 });
 
 // Get probation by ID
-router.get('/:id', authenticateToken, (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
-    const probation = db.prepare(`
+    const probation = await db.prepare(`
       SELECT p.*, u.name as user_name, u.email as user_email, u.department, u.designation,
              c.name as confirmed_by_name
       FROM probations p
@@ -93,12 +93,12 @@ router.get('/:id', authenticateToken, (req, res) => {
     }
 
     // Get checklists
-    const checklists = db.prepare(`
+    const checklists = await db.prepare(`
       SELECT * FROM probation_checklists WHERE probation_id = ?
     `).all(probation.id);
 
     // Get reviews
-    const reviews = db.prepare(`
+    const reviews = await db.prepare(`
       SELECT pr.*, u.name as reviewer_name
       FROM probation_reviews pr
       JOIN users u ON pr.reviewer_id = u.id
@@ -116,13 +116,13 @@ router.get('/:id', authenticateToken, (req, res) => {
 });
 
 // Create probation
-router.post('/', authenticateToken, (req, res) => {
+router.post('/', authenticateToken, async (req, res) => {
   try {
     const { user_id, start_date, end_date, duration_days, notes } = req.body;
 
     const id = `prob-${uuidv4()}`;
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO probations (id, user_id, start_date, end_date, duration_days, notes)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(id, user_id, start_date, end_date, duration_days || 90, notes || '');
@@ -138,20 +138,18 @@ router.post('/', authenticateToken, (req, res) => {
       '90-day review'
     ];
 
-    const insertChecklist = db.prepare(`
-      INSERT INTO probation_checklists (id, probation_id, item) VALUES (?, ?, ?)
-    `);
-
-    defaultItems.forEach((item, index) => {
-      insertChecklist.run(`pc-${uuidv4()}`, id, item);
-    });
+    for (const item of defaultItems) {
+      await db.prepare(`
+        INSERT INTO probation_checklists (id, probation_id, item) VALUES (?, ?, ?)
+      `).run(`pc-${uuidv4()}`, id, item);
+    }
 
     // Update team_members table
-    db.prepare(`
+    await db.prepare(`
       UPDATE team_members SET in_probation = 1 WHERE user_id = ?
     `).run(user_id);
 
-    const probation = db.prepare('SELECT * FROM probations WHERE id = ?').get(id);
+    const probation = await db.prepare('SELECT * FROM probations WHERE id = ?').get(id);
     res.status(201).json(probation);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -159,10 +157,10 @@ router.post('/', authenticateToken, (req, res) => {
 });
 
 // Update probation (extend, confirm, terminate)
-router.put('/:id', authenticateToken, (req, res) => {
+router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { status, extended_till, extension_reason, notes, confirmed_by, confirmed_at } = req.body;
-    const probation = db.prepare('SELECT * FROM probations WHERE id = ?').get(req.params.id);
+    const probation = await db.prepare('SELECT * FROM probations WHERE id = ?').get(req.params.id);
 
     if (!probation) {
       return res.status(404).json({ error: 'Probation not found' });
@@ -206,16 +204,16 @@ router.put('/:id', authenticateToken, (req, res) => {
     updateQuery += updates.join(', ') + ' WHERE id = ?';
     values.push(req.params.id);
 
-    db.prepare(updateQuery).run(...values);
+    await db.prepare(updateQuery).run(...values);
 
     // If confirmed or terminated, update team_members
     if (status === 'confirmed' || status === 'terminated') {
-      db.prepare(`
+      await db.prepare(`
         UPDATE team_members SET in_probation = 0 WHERE user_id = ?
       `).run(probation.user_id);
     }
 
-    const updated = db.prepare('SELECT * FROM probations WHERE id = ?').get(req.params.id);
+    const updated = await db.prepare('SELECT * FROM probations WHERE id = ?').get(req.params.id);
     res.json(updated);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -223,10 +221,10 @@ router.put('/:id', authenticateToken, (req, res) => {
 });
 
 // Add probation review
-router.post('/:id/reviews', authenticateToken, (req, res) => {
+router.post('/:id/reviews', authenticateToken, async (req, res) => {
   try {
     const { milestone, rating, feedback, recommendation } = req.body;
-    const probation = db.prepare('SELECT * FROM probations WHERE id = ?').get(req.params.id);
+    const probation = await db.prepare('SELECT * FROM probations WHERE id = ?').get(req.params.id);
 
     if (!probation) {
       return res.status(404).json({ error: 'Probation not found' });
@@ -235,12 +233,12 @@ router.post('/:id/reviews', authenticateToken, (req, res) => {
     const id = `pr-${uuidv4()}`;
     const review_date = new Date().toISOString().split('T')[0];
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO probation_reviews (id, probation_id, reviewer_id, review_date, milestone, rating, feedback, recommendation)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(id, req.params.id, req.user.id, review_date, milestone, rating, feedback, recommendation);
 
-    const review = db.prepare(`
+    const review = await db.prepare(`
       SELECT pr.*, u.name as reviewer_name
       FROM probation_reviews pr
       JOIN users u ON pr.reviewer_id = u.id
@@ -254,9 +252,9 @@ router.post('/:id/reviews', authenticateToken, (req, res) => {
 });
 
 // Get probation reviews
-router.get('/:id/reviews', authenticateToken, (req, res) => {
+router.get('/:id/reviews', authenticateToken, async (req, res) => {
   try {
-    const reviews = db.prepare(`
+    const reviews = await db.prepare(`
       SELECT pr.*, u.name as reviewer_name
       FROM probation_reviews pr
       JOIN users u ON pr.reviewer_id = u.id
@@ -271,11 +269,11 @@ router.get('/:id/reviews', authenticateToken, (req, res) => {
 });
 
 // Update checklist item
-router.put('/:id/checklist/:checklistId', authenticateToken, (req, res) => {
+router.put('/:id/checklist/:checklistId', authenticateToken, async (req, res) => {
   try {
     const { is_completed } = req.body;
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE probation_checklists
       SET is_completed = ?, completed_at = ?, completed_by = ?
       WHERE id = ?
@@ -286,7 +284,7 @@ router.put('/:id/checklist/:checklistId', authenticateToken, (req, res) => {
       req.params.checklistId
     );
 
-    const checklist = db.prepare('SELECT * FROM probation_checklists WHERE id = ?').get(req.params.checklistId);
+    const checklist = await db.prepare('SELECT * FROM probation_checklists WHERE id = ?').get(req.params.checklistId);
     res.json(checklist);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -294,9 +292,9 @@ router.put('/:id/checklist/:checklistId', authenticateToken, (req, res) => {
 });
 
 // Get checklists for probation
-router.get('/:id/checklist', authenticateToken, (req, res) => {
+router.get('/:id/checklist', authenticateToken, async (req, res) => {
   try {
-    const checklists = db.prepare(`
+    const checklists = await db.prepare(`
       SELECT * FROM probation_checklists WHERE probation_id = ?
     `).all(req.params.id);
 
@@ -307,17 +305,17 @@ router.get('/:id/checklist', authenticateToken, (req, res) => {
 });
 
 // Add custom checklist item
-router.post('/:id/checklist', authenticateToken, (req, res) => {
+router.post('/:id/checklist', authenticateToken, async (req, res) => {
   try {
     const { item } = req.body;
     const id = `pc-${uuidv4()}`;
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO probation_checklists (id, probation_id, item)
       VALUES (?, ?, ?)
     `).run(id, req.params.id, item);
 
-    const checklist = db.prepare('SELECT * FROM probation_checklists WHERE id = ?').get(id);
+    const checklist = await db.prepare('SELECT * FROM probation_checklists WHERE id = ?').get(id);
     res.status(201).json(checklist);
   } catch (error) {
     res.status(500).json({ error: error.message });

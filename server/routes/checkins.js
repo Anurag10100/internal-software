@@ -5,12 +5,12 @@ const { authenticateToken } = require('../middleware/auth');
 const router = express.Router();
 
 // Get all check-ins (admin) or my check-ins (employee)
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     let checkins;
 
     if (req.user.role === 'admin') {
-      checkins = db.prepare(`
+      checkins = await db.prepare(`
         SELECT
           c.*,
           u.name as user_name,
@@ -20,7 +20,7 @@ router.get('/', authenticateToken, (req, res) => {
         ORDER BY c.date DESC, c.check_in_time DESC
       `).all();
     } else {
-      checkins = db.prepare(`
+      checkins = await db.prepare(`
         SELECT * FROM check_ins
         WHERE user_id = ?
         ORDER BY date DESC, check_in_time DESC
@@ -49,9 +49,9 @@ router.get('/', authenticateToken, (req, res) => {
 });
 
 // Get my check-ins
-router.get('/my-checkins', authenticateToken, (req, res) => {
+router.get('/my-checkins', authenticateToken, async (req, res) => {
   try {
-    const checkins = db.prepare(`
+    const checkins = await db.prepare(`
       SELECT * FROM check_ins
       WHERE user_id = ?
       ORDER BY date DESC, check_in_time DESC
@@ -77,7 +77,7 @@ router.get('/my-checkins', authenticateToken, (req, res) => {
 });
 
 // Check in
-router.post('/check-in', authenticateToken, (req, res) => {
+router.post('/check-in', authenticateToken, async (req, res) => {
   try {
     const { location, notes } = req.body;
 
@@ -85,7 +85,7 @@ router.post('/check-in', authenticateToken, (req, res) => {
     const now = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
     // Check if already checked in today
-    const existingCheckin = db.prepare(`
+    const existingCheckin = await db.prepare(`
       SELECT * FROM check_ins WHERE user_id = ? AND date = ?
     `).get(req.user.id, today);
 
@@ -97,13 +97,13 @@ router.post('/check-in', authenticateToken, (req, res) => {
 
     if (existingCheckin) {
       // Update existing record
-      db.prepare(`
+      await db.prepare(`
         UPDATE check_ins SET check_in_time = ?, location = ?, notes = ?
         WHERE id = ?
       `).run(now, location || 'Office', notes || '', existingCheckin.id);
     } else {
       // Create new record
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO check_ins (id, user_id, date, check_in_time, location, status, notes)
         VALUES (?, ?, ?, ?, ?, 'present', ?)
       `).run(checkinId, req.user.id, today, now, location || 'Office', notes || '');
@@ -125,12 +125,12 @@ router.post('/check-in', authenticateToken, (req, res) => {
 });
 
 // Check out
-router.post('/check-out', authenticateToken, (req, res) => {
+router.post('/check-out', authenticateToken, async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
     const now = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-    const existingCheckin = db.prepare(`
+    const existingCheckin = await db.prepare(`
       SELECT * FROM check_ins WHERE user_id = ? AND date = ?
     `).get(req.user.id, today);
 
@@ -142,7 +142,7 @@ router.post('/check-out', authenticateToken, (req, res) => {
       return res.status(400).json({ error: 'Already checked out today' });
     }
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE check_ins SET check_out_time = ?
       WHERE id = ?
     `).run(now, existingCheckin.id);
@@ -163,11 +163,11 @@ router.post('/check-out', authenticateToken, (req, res) => {
 });
 
 // Get today's check-in status
-router.get('/today', authenticateToken, (req, res) => {
+router.get('/today', authenticateToken, async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
 
-    const checkin = db.prepare(`
+    const checkin = await db.prepare(`
       SELECT * FROM check_ins WHERE user_id = ? AND date = ?
     `).get(req.user.id, today);
 

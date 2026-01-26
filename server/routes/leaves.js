@@ -5,12 +5,12 @@ const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const router = express.Router();
 
 // Get all leave requests (admin) or my requests (employee)
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     let leaves;
 
     if (req.user.role === 'admin') {
-      leaves = db.prepare(`
+      leaves = await db.prepare(`
         SELECT
           lr.*,
           u.name as user_name,
@@ -20,7 +20,7 @@ router.get('/', authenticateToken, (req, res) => {
         ORDER BY lr.created_at DESC
       `).all();
     } else {
-      leaves = db.prepare(`
+      leaves = await db.prepare(`
         SELECT * FROM leave_requests
         WHERE user_id = ?
         ORDER BY created_at DESC
@@ -49,9 +49,9 @@ router.get('/', authenticateToken, (req, res) => {
 });
 
 // Get my leave requests
-router.get('/my-leaves', authenticateToken, (req, res) => {
+router.get('/my-leaves', authenticateToken, async (req, res) => {
   try {
-    const leaves = db.prepare(`
+    const leaves = await db.prepare(`
       SELECT * FROM leave_requests
       WHERE user_id = ?
       ORDER BY created_at DESC
@@ -77,7 +77,7 @@ router.get('/my-leaves', authenticateToken, (req, res) => {
 });
 
 // Create leave request
-router.post('/', authenticateToken, (req, res) => {
+router.post('/', authenticateToken, async (req, res) => {
   try {
     const { leaveType, startDate, endDate, reason } = req.body;
 
@@ -87,12 +87,12 @@ router.post('/', authenticateToken, (req, res) => {
 
     const leaveId = `leave-${Date.now()}`;
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO leave_requests (id, user_id, leave_type, start_date, end_date, reason, status)
       VALUES (?, ?, ?, ?, ?, ?, 'pending')
     `).run(leaveId, req.user.id, leaveType, startDate, endDate, reason || '');
 
-    const leave = db.prepare('SELECT * FROM leave_requests WHERE id = ?').get(leaveId);
+    const leave = await db.prepare('SELECT * FROM leave_requests WHERE id = ?').get(leaveId);
 
     res.status(201).json({
       message: 'Leave request submitted successfully',
@@ -114,12 +114,12 @@ router.post('/', authenticateToken, (req, res) => {
 });
 
 // Update leave request status (admin only)
-router.put('/:id', authenticateToken, (req, res) => {
+router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { status, reason } = req.body;
 
-    const existingLeave = db.prepare('SELECT * FROM leave_requests WHERE id = ?').get(id);
+    const existingLeave = await db.prepare('SELECT * FROM leave_requests WHERE id = ?').get(id);
     if (!existingLeave) {
       return res.status(404).json({ error: 'Leave request not found' });
     }
@@ -130,15 +130,15 @@ router.put('/:id', authenticateToken, (req, res) => {
     }
 
     if (status) {
-      db.prepare(`
+      await db.prepare(`
         UPDATE leave_requests SET status = ?, approved_by = ?
         WHERE id = ?
       `).run(status, req.user.id, id);
     } else if (reason !== undefined && existingLeave.user_id === req.user.id && existingLeave.status === 'pending') {
-      db.prepare('UPDATE leave_requests SET reason = ? WHERE id = ?').run(reason, id);
+      await db.prepare('UPDATE leave_requests SET reason = ? WHERE id = ?').run(reason, id);
     }
 
-    const updatedLeave = db.prepare('SELECT * FROM leave_requests WHERE id = ?').get(id);
+    const updatedLeave = await db.prepare('SELECT * FROM leave_requests WHERE id = ?').get(id);
 
     res.json({
       message: 'Leave request updated successfully',
@@ -161,11 +161,11 @@ router.put('/:id', authenticateToken, (req, res) => {
 });
 
 // Delete leave request
-router.delete('/:id', authenticateToken, (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const existingLeave = db.prepare('SELECT * FROM leave_requests WHERE id = ?').get(id);
+    const existingLeave = await db.prepare('SELECT * FROM leave_requests WHERE id = ?').get(id);
     if (!existingLeave) {
       return res.status(404).json({ error: 'Leave request not found' });
     }
@@ -175,7 +175,7 @@ router.delete('/:id', authenticateToken, (req, res) => {
       return res.status(403).json({ error: 'Not authorized to delete this leave request' });
     }
 
-    db.prepare('DELETE FROM leave_requests WHERE id = ?').run(id);
+    await db.prepare('DELETE FROM leave_requests WHERE id = ?').run(id);
 
     res.json({ message: 'Leave request deleted successfully' });
   } catch (error) {
