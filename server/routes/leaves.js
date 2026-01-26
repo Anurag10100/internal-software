@@ -1,8 +1,13 @@
 const express = require('express');
-const { db } = require('../config/database');
+const { createClient } = require('@supabase/supabase-js');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 // Get all leave requests (admin) or my requests (employee)
 router.get('/', authenticateToken, async (req, res) => {
@@ -10,21 +15,26 @@ router.get('/', authenticateToken, async (req, res) => {
     let leaves;
 
     if (req.user.role === 'admin') {
-      leaves = await db.prepare(`
-        SELECT
-          lr.*,
-          u.name as user_name,
-          u.department as user_department
-        FROM leave_requests lr
-        LEFT JOIN users u ON lr.user_id = u.id
-        ORDER BY lr.created_at DESC
-      `).all();
+      const { data, error } = await supabase
+        .from('leave_requests')
+        .select('*, user:users!user_id(name, department)')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      leaves = data.map(l => ({
+        ...l,
+        user_name: l.user?.name,
+        user_department: l.user?.department
+      }));
     } else {
-      leaves = await db.prepare(`
-        SELECT * FROM leave_requests
-        WHERE user_id = ?
-        ORDER BY created_at DESC
-      `).all(req.user.id);
+      const { data, error } = await supabase
+        .from('leave_requests')
+        .select('*')
+        .eq('user_id', req.user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      leaves = data;
     }
 
     const formattedLeaves = leaves.map(l => ({
@@ -51,11 +61,13 @@ router.get('/', authenticateToken, async (req, res) => {
 // Get my leave requests
 router.get('/my-leaves', authenticateToken, async (req, res) => {
   try {
-    const leaves = await db.prepare(`
-      SELECT * FROM leave_requests
-      WHERE user_id = ?
-      ORDER BY created_at DESC
-    `).all(req.user.id);
+    const { data: leaves, error } = await supabase
+      .from('leave_requests')
+      .select('*')
+      .eq('user_id', req.user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
 
     const formattedLeaves = leaves.map(l => ({
       id: l.id,
@@ -87,12 +99,21 @@ router.post('/', authenticateToken, async (req, res) => {
 
     const leaveId = `leave-${Date.now()}`;
 
-    await db.prepare(`
-      INSERT INTO leave_requests (id, user_id, leave_type, start_date, end_date, reason, status)
-      VALUES (?, ?, ?, ?, ?, ?, 'pending')
-    `).run(leaveId, req.user.id, leaveType, startDate, endDate, reason || '');
+    const { data: leave, error } = await supabase
+      .from('leave_requests')
+      .insert({
+        id: leaveId,
+        user_id: req.user.id,
+        leave_type: leaveType,
+        start_date: startDate,
+        end_date: endDate,
+        reason: reason || '',
+        status: 'pending'
+      })
+      .select()
+      .single();
 
-    const leave = await db.prepare('SELECT * FROM leave_requests WHERE id = ?').get(leaveId);
+    if (error) throw error;
 
     res.status(201).json({
       message: 'Leave request submitted successfully',
@@ -119,26 +140,35 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { status, reason } = req.body;
 
-    const existingLeave = await db.prepare('SELECT * FROM leave_requests WHERE id = ?').get(id);
-    if (!existingLeave) {
+    const { data: existingLeave, error: findError } = await supabase
+      .from('leave_requests')
+      .select()
+      .eq('id', id)
+      .single();
+
+    if (findError || !existingLeave) {
       return res.status(404).json({ error: 'Leave request not found' });
     }
 
-    // Only admin can approve/reject, or owner can update reason if pending
     if (status && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Only admins can approve/reject leave requests' });
     }
 
+    let updateData = {};
     if (status) {
-      await db.prepare(`
-        UPDATE leave_requests SET status = ?, approved_by = ?
-        WHERE id = ?
-      `).run(status, req.user.id, id);
+      updateData = { status, approved_by: req.user.id };
     } else if (reason !== undefined && existingLeave.user_id === req.user.id && existingLeave.status === 'pending') {
-      await db.prepare('UPDATE leave_requests SET reason = ? WHERE id = ?').run(reason, id);
+      updateData = { reason };
     }
 
-    const updatedLeave = await db.prepare('SELECT * FROM leave_requests WHERE id = ?').get(id);
+    const { data: updatedLeave, error } = await supabase
+      .from('leave_requests')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
 
     res.json({
       message: 'Leave request updated successfully',
@@ -165,17 +195,26 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const existingLeave = await db.prepare('SELECT * FROM leave_requests WHERE id = ?').get(id);
-    if (!existingLeave) {
+    const { data: existingLeave, error: findError } = await supabase
+      .from('leave_requests')
+      .select()
+      .eq('id', id)
+      .single();
+
+    if (findError || !existingLeave) {
       return res.status(404).json({ error: 'Leave request not found' });
     }
 
-    // Only owner or admin can delete
     if (existingLeave.user_id !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Not authorized to delete this leave request' });
     }
 
-    await db.prepare('DELETE FROM leave_requests WHERE id = ?').run(id);
+    const { error } = await supabase
+      .from('leave_requests')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
 
     res.json({ message: 'Leave request deleted successfully' });
   } catch (error) {

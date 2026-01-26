@@ -1,8 +1,13 @@
 const express = require('express');
-const { db } = require('../config/database');
+const { createClient } = require('@supabase/supabase-js');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 // Get all check-ins (admin) or my check-ins (employee)
 router.get('/', authenticateToken, async (req, res) => {
@@ -10,21 +15,28 @@ router.get('/', authenticateToken, async (req, res) => {
     let checkins;
 
     if (req.user.role === 'admin') {
-      checkins = await db.prepare(`
-        SELECT
-          c.*,
-          u.name as user_name,
-          u.department as user_department
-        FROM check_ins c
-        LEFT JOIN users u ON c.user_id = u.id
-        ORDER BY c.date DESC, c.check_in_time DESC
-      `).all();
+      const { data, error } = await supabase
+        .from('check_ins')
+        .select('*, user:users!user_id(name, department)')
+        .order('date', { ascending: false })
+        .order('check_in_time', { ascending: false });
+
+      if (error) throw error;
+      checkins = data.map(c => ({
+        ...c,
+        user_name: c.user?.name,
+        user_department: c.user?.department
+      }));
     } else {
-      checkins = await db.prepare(`
-        SELECT * FROM check_ins
-        WHERE user_id = ?
-        ORDER BY date DESC, check_in_time DESC
-      `).all(req.user.id);
+      const { data, error } = await supabase
+        .from('check_ins')
+        .select('*')
+        .eq('user_id', req.user.id)
+        .order('date', { ascending: false })
+        .order('check_in_time', { ascending: false });
+
+      if (error) throw error;
+      checkins = data;
     }
 
     const formattedCheckins = checkins.map(c => ({
@@ -51,11 +63,14 @@ router.get('/', authenticateToken, async (req, res) => {
 // Get my check-ins
 router.get('/my-checkins', authenticateToken, async (req, res) => {
   try {
-    const checkins = await db.prepare(`
-      SELECT * FROM check_ins
-      WHERE user_id = ?
-      ORDER BY date DESC, check_in_time DESC
-    `).all(req.user.id);
+    const { data: checkins, error } = await supabase
+      .from('check_ins')
+      .select('*')
+      .eq('user_id', req.user.id)
+      .order('date', { ascending: false })
+      .order('check_in_time', { ascending: false });
+
+    if (error) throw error;
 
     const formattedCheckins = checkins.map(c => ({
       id: c.id,
@@ -85,9 +100,12 @@ router.post('/check-in', authenticateToken, async (req, res) => {
     const now = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
     // Check if already checked in today
-    const existingCheckin = await db.prepare(`
-      SELECT * FROM check_ins WHERE user_id = ? AND date = ?
-    `).get(req.user.id, today);
+    const { data: existingCheckin } = await supabase
+      .from('check_ins')
+      .select()
+      .eq('user_id', req.user.id)
+      .eq('date', today)
+      .single();
 
     if (existingCheckin && existingCheckin.check_in_time) {
       return res.status(400).json({ error: 'Already checked in today' });
@@ -96,17 +114,30 @@ router.post('/check-in', authenticateToken, async (req, res) => {
     const checkinId = `checkin-${Date.now()}`;
 
     if (existingCheckin) {
-      // Update existing record
-      await db.prepare(`
-        UPDATE check_ins SET check_in_time = ?, location = ?, notes = ?
-        WHERE id = ?
-      `).run(now, location || 'Office', notes || '', existingCheckin.id);
+      const { error } = await supabase
+        .from('check_ins')
+        .update({
+          check_in_time: now,
+          location: location || 'Office',
+          notes: notes || ''
+        })
+        .eq('id', existingCheckin.id);
+
+      if (error) throw error;
     } else {
-      // Create new record
-      await db.prepare(`
-        INSERT INTO check_ins (id, user_id, date, check_in_time, location, status, notes)
-        VALUES (?, ?, ?, ?, ?, 'present', ?)
-      `).run(checkinId, req.user.id, today, now, location || 'Office', notes || '');
+      const { error } = await supabase
+        .from('check_ins')
+        .insert({
+          id: checkinId,
+          user_id: req.user.id,
+          date: today,
+          check_in_time: now,
+          location: location || 'Office',
+          status: 'present',
+          notes: notes || ''
+        });
+
+      if (error) throw error;
     }
 
     res.status(201).json({
@@ -130,9 +161,12 @@ router.post('/check-out', authenticateToken, async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const now = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-    const existingCheckin = await db.prepare(`
-      SELECT * FROM check_ins WHERE user_id = ? AND date = ?
-    `).get(req.user.id, today);
+    const { data: existingCheckin } = await supabase
+      .from('check_ins')
+      .select()
+      .eq('user_id', req.user.id)
+      .eq('date', today)
+      .single();
 
     if (!existingCheckin || !existingCheckin.check_in_time) {
       return res.status(400).json({ error: 'You need to check in first' });
@@ -142,10 +176,12 @@ router.post('/check-out', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Already checked out today' });
     }
 
-    await db.prepare(`
-      UPDATE check_ins SET check_out_time = ?
-      WHERE id = ?
-    `).run(now, existingCheckin.id);
+    const { error } = await supabase
+      .from('check_ins')
+      .update({ check_out_time: now })
+      .eq('id', existingCheckin.id);
+
+    if (error) throw error;
 
     res.json({
       message: 'Checked out successfully',
@@ -167,9 +203,12 @@ router.get('/today', authenticateToken, async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
 
-    const checkin = await db.prepare(`
-      SELECT * FROM check_ins WHERE user_id = ? AND date = ?
-    `).get(req.user.id, today);
+    const { data: checkin } = await supabase
+      .from('check_ins')
+      .select()
+      .eq('user_id', req.user.id)
+      .eq('date', today)
+      .single();
 
     res.json({
       checkin: checkin ? {

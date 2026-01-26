@@ -1,22 +1,35 @@
 const express = require('express');
 const router = express.Router();
-const { db } = require('../config/database');
 const { authenticateToken } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
+const { createClient } = require('@supabase/supabase-js');
+
+// Initialize Supabase client
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 // ==========================================
 // KPIs
 // ==========================================
 
-// Get all KPIs (admin)
 router.get('/kpis', authenticateToken, async (req, res) => {
   try {
-    const kpis = await db.prepare(`
-      SELECT k.*, u.name as user_name, u.department, u.designation
-      FROM kpis k
-      JOIN users u ON k.user_id = u.id
-      ORDER BY k.created_at DESC
-    `).all();
+    const { data, error } = await supabase
+      .from('kpis')
+      .select('*, users!user_id(name, department, designation)')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const kpis = data.map(k => ({
+      ...k,
+      user_name: k.users?.name,
+      department: k.users?.department,
+      designation: k.users?.designation,
+      users: undefined
+    }));
 
     res.json(kpis);
   } catch (error) {
@@ -24,79 +37,86 @@ router.get('/kpis', authenticateToken, async (req, res) => {
   }
 });
 
-// Get my KPIs
 router.get('/kpis/my-kpis', authenticateToken, async (req, res) => {
   try {
-    const kpis = await db.prepare(`
-      SELECT * FROM kpis WHERE user_id = ? ORDER BY created_at DESC
-    `).all(req.user.id);
+    const { data, error } = await supabase
+      .from('kpis')
+      .select('*')
+      .eq('user_id', req.user.id)
+      .order('created_at', { ascending: false });
 
-    res.json(kpis);
+    if (error) throw error;
+    res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Get KPIs for specific user
 router.get('/kpis/user/:userId', authenticateToken, async (req, res) => {
   try {
-    const kpis = await db.prepare(`
-      SELECT * FROM kpis WHERE user_id = ? ORDER BY created_at DESC
-    `).all(req.params.userId);
+    const { data, error } = await supabase
+      .from('kpis')
+      .select('*')
+      .eq('user_id', req.params.userId)
+      .order('created_at', { ascending: false });
 
-    res.json(kpis);
+    if (error) throw error;
+    res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Create KPI
 router.post('/kpis', authenticateToken, async (req, res) => {
   try {
     const { user_id, title, description, metric_type, target_value, unit, period } = req.body;
     const id = `kpi-${uuidv4()}`;
 
-    await db.prepare(`
-      INSERT INTO kpis (id, user_id, title, description, metric_type, target_value, unit, period)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, user_id, title, description, metric_type, target_value, unit, period);
+    const { data, error } = await supabase
+      .from('kpis')
+      .insert({ id, user_id, title, description, metric_type, target_value, unit, period })
+      .select()
+      .single();
 
-    const kpi = await db.prepare('SELECT * FROM kpis WHERE id = ?').get(id);
-    res.status(201).json(kpi);
+    if (error) throw error;
+    res.status(201).json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Update KPI
 router.put('/kpis/:id', authenticateToken, async (req, res) => {
   try {
     const { title, description, metric_type, target_value, current_value, unit, period, status } = req.body;
 
-    await db.prepare(`
-      UPDATE kpis
-      SET title = COALESCE(?, title),
-          description = COALESCE(?, description),
-          metric_type = COALESCE(?, metric_type),
-          target_value = COALESCE(?, target_value),
-          current_value = COALESCE(?, current_value),
-          unit = COALESCE(?, unit),
-          period = COALESCE(?, period),
-          status = COALESCE(?, status)
-      WHERE id = ?
-    `).run(title, description, metric_type, target_value, current_value, unit, period, status, req.params.id);
+    const updateData = {};
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
+    if (metric_type !== undefined) updateData.metric_type = metric_type;
+    if (target_value !== undefined) updateData.target_value = target_value;
+    if (current_value !== undefined) updateData.current_value = current_value;
+    if (unit !== undefined) updateData.unit = unit;
+    if (period !== undefined) updateData.period = period;
+    if (status !== undefined) updateData.status = status;
 
-    const kpi = await db.prepare('SELECT * FROM kpis WHERE id = ?').get(req.params.id);
-    res.json(kpi);
+    const { data, error } = await supabase
+      .from('kpis')
+      .update(updateData)
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Delete KPI
 router.delete('/kpis/:id', authenticateToken, async (req, res) => {
   try {
-    await db.prepare('DELETE FROM kpis WHERE id = ?').run(req.params.id);
+    const { error } = await supabase.from('kpis').delete().eq('id', req.params.id);
+    if (error) throw error;
     res.json({ message: 'KPI deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -107,18 +127,23 @@ router.delete('/kpis/:id', authenticateToken, async (req, res) => {
 // PERFORMANCE NOTES
 // ==========================================
 
-// Get all notes (admin)
 router.get('/notes', authenticateToken, async (req, res) => {
   try {
-    const notes = await db.prepare(`
-      SELECT pn.*,
-             u.name as user_name, u.department,
-             a.name as author_name
-      FROM performance_notes pn
-      JOIN users u ON pn.user_id = u.id
-      JOIN users a ON pn.author_id = a.id
-      ORDER BY pn.created_at DESC
-    `).all();
+    const { data, error } = await supabase
+      .from('performance_notes')
+      .select('*, user:users!user_id(name, department), author:users!author_id(name)')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const notes = data.map(n => ({
+      ...n,
+      user_name: n.user?.name,
+      department: n.user?.department,
+      author_name: n.author?.name,
+      user: undefined,
+      author: undefined
+    }));
 
     res.json(notes);
   } catch (error) {
@@ -126,17 +151,26 @@ router.get('/notes', authenticateToken, async (req, res) => {
   }
 });
 
-// Get notes for specific user
 router.get('/notes/for/:userId', authenticateToken, async (req, res) => {
   try {
-    // Only show non-private notes unless requester is admin or author
-    const notes = await db.prepare(`
-      SELECT pn.*, a.name as author_name
-      FROM performance_notes pn
-      JOIN users a ON pn.author_id = a.id
-      WHERE pn.user_id = ? AND (pn.is_private = 0 OR pn.author_id = ? OR ? = 'admin')
-      ORDER BY pn.created_at DESC
-    `).all(req.params.userId, req.user.id, req.user.role);
+    let query = supabase
+      .from('performance_notes')
+      .select('*, author:users!author_id(name)')
+      .eq('user_id', req.params.userId)
+      .order('created_at', { ascending: false });
+
+    if (req.user.role !== 'admin') {
+      query = query.or(`is_private.eq.0,author_id.eq.${req.user.id}`);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const notes = data.map(n => ({
+      ...n,
+      author_name: n.author?.name,
+      author: undefined
+    }));
 
     res.json(notes);
   } catch (error) {
@@ -144,16 +178,22 @@ router.get('/notes/for/:userId', authenticateToken, async (req, res) => {
   }
 });
 
-// Get my notes (received)
 router.get('/notes/my-notes', authenticateToken, async (req, res) => {
   try {
-    const notes = await db.prepare(`
-      SELECT pn.*, a.name as author_name
-      FROM performance_notes pn
-      JOIN users a ON pn.author_id = a.id
-      WHERE pn.user_id = ? AND pn.is_private = 0
-      ORDER BY pn.created_at DESC
-    `).all(req.user.id);
+    const { data, error } = await supabase
+      .from('performance_notes')
+      .select('*, author:users!author_id(name)')
+      .eq('user_id', req.user.id)
+      .eq('is_private', 0)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const notes = data.map(n => ({
+      ...n,
+      author_name: n.author?.name,
+      author: undefined
+    }));
 
     res.json(notes);
   } catch (error) {
@@ -161,34 +201,45 @@ router.get('/notes/my-notes', authenticateToken, async (req, res) => {
   }
 });
 
-// Create note
 router.post('/notes', authenticateToken, async (req, res) => {
   try {
     const { user_id, type, content, is_private } = req.body;
     const id = `note-${uuidv4()}`;
 
-    await db.prepare(`
-      INSERT INTO performance_notes (id, user_id, author_id, type, content, is_private)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, user_id, req.user.id, type, content, is_private ? 1 : 0);
+    const { data, error } = await supabase
+      .from('performance_notes')
+      .insert({
+        id,
+        user_id,
+        author_id: req.user.id,
+        type,
+        content,
+        is_private: is_private ? 1 : 0
+      })
+      .select('*, author:users!author_id(name)')
+      .single();
 
-    const note = await db.prepare(`
-      SELECT pn.*, a.name as author_name
-      FROM performance_notes pn
-      JOIN users a ON pn.author_id = a.id
-      WHERE pn.id = ?
-    `).get(id);
+    if (error) throw error;
 
-    res.status(201).json(note);
+    res.status(201).json({
+      ...data,
+      author_name: data.author?.name,
+      author: undefined
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Delete note
 router.delete('/notes/:id', authenticateToken, async (req, res) => {
   try {
-    await db.prepare('DELETE FROM performance_notes WHERE id = ? AND author_id = ?').run(req.params.id, req.user.id);
+    const { error } = await supabase
+      .from('performance_notes')
+      .delete()
+      .eq('id', req.params.id)
+      .eq('author_id', req.user.id);
+
+    if (error) throw error;
     res.json({ message: 'Note deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -196,21 +247,27 @@ router.delete('/notes/:id', authenticateToken, async (req, res) => {
 });
 
 // ==========================================
-// PIPs (Performance Improvement Plans)
+// PIPs
 // ==========================================
 
-// Get all PIPs (admin)
 router.get('/pips', authenticateToken, async (req, res) => {
   try {
-    const pips = await db.prepare(`
-      SELECT p.*,
-             u.name as user_name, u.department, u.designation,
-             m.name as manager_name
-      FROM pips p
-      JOIN users u ON p.user_id = u.id
-      JOIN users m ON p.manager_id = m.id
-      ORDER BY p.created_at DESC
-    `).all();
+    const { data, error } = await supabase
+      .from('pips')
+      .select('*, user:users!user_id(name, department, designation), manager:users!manager_id(name)')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const pips = data.map(p => ({
+      ...p,
+      user_name: p.user?.name,
+      department: p.user?.department,
+      designation: p.user?.designation,
+      manager_name: p.manager?.name,
+      user: undefined,
+      manager: undefined
+    }));
 
     res.json(pips);
   } catch (error) {
@@ -218,19 +275,25 @@ router.get('/pips', authenticateToken, async (req, res) => {
   }
 });
 
-// Get active PIPs
 router.get('/pips/active', authenticateToken, async (req, res) => {
   try {
-    const pips = await db.prepare(`
-      SELECT p.*,
-             u.name as user_name, u.department, u.designation,
-             m.name as manager_name
-      FROM pips p
-      JOIN users u ON p.user_id = u.id
-      JOIN users m ON p.manager_id = m.id
-      WHERE p.status = 'active'
-      ORDER BY p.end_date ASC
-    `).all();
+    const { data, error } = await supabase
+      .from('pips')
+      .select('*, user:users!user_id(name, department, designation), manager:users!manager_id(name)')
+      .eq('status', 'active')
+      .order('end_date', { ascending: true });
+
+    if (error) throw error;
+
+    const pips = data.map(p => ({
+      ...p,
+      user_name: p.user?.name,
+      department: p.user?.department,
+      designation: p.user?.designation,
+      manager_name: p.manager?.name,
+      user: undefined,
+      manager: undefined
+    }));
 
     res.json(pips);
   } catch (error) {
@@ -238,62 +301,34 @@ router.get('/pips/active', authenticateToken, async (req, res) => {
   }
 });
 
-// Get my PIP
 router.get('/pips/my-pip', authenticateToken, async (req, res) => {
   try {
-    const pip = await db.prepare(`
-      SELECT p.*, m.name as manager_name
-      FROM pips p
-      JOIN users m ON p.manager_id = m.id
-      WHERE p.user_id = ? AND p.status = 'active'
-      ORDER BY p.created_at DESC
-      LIMIT 1
-    `).get(req.user.id);
+    const { data: pip, error } = await supabase
+      .from('pips')
+      .select('*, manager:users!manager_id(name)')
+      .eq('user_id', req.user.id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
 
     if (pip) {
-      const checkpoints = await db.prepare(`
-        SELECT pc.*, u.name as reviewed_by_name
-        FROM pip_checkpoints pc
-        LEFT JOIN users u ON pc.reviewed_by = u.id
-        WHERE pc.pip_id = ?
-        ORDER BY pc.checkpoint_date DESC
-      `).all(pip.id);
+      const { data: checkpoints } = await supabase
+        .from('pip_checkpoints')
+        .select('*, reviewer:users!reviewed_by(name)')
+        .eq('pip_id', pip.id)
+        .order('checkpoint_date', { ascending: false });
 
-      pip.checkpoints = checkpoints;
+      pip.checkpoints = (checkpoints || []).map(c => ({
+        ...c,
+        reviewed_by_name: c.reviewer?.name,
+        reviewer: undefined
+      }));
+      pip.manager_name = pip.manager?.name;
+      delete pip.manager;
     }
-
-    res.json(pip || null);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get PIP by ID
-router.get('/pips/:id', authenticateToken, async (req, res) => {
-  try {
-    const pip = await db.prepare(`
-      SELECT p.*,
-             u.name as user_name, u.email as user_email, u.department, u.designation,
-             m.name as manager_name
-      FROM pips p
-      JOIN users u ON p.user_id = u.id
-      JOIN users m ON p.manager_id = m.id
-      WHERE p.id = ?
-    `).get(req.params.id);
-
-    if (!pip) {
-      return res.status(404).json({ error: 'PIP not found' });
-    }
-
-    const checkpoints = await db.prepare(`
-      SELECT pc.*, u.name as reviewed_by_name
-      FROM pip_checkpoints pc
-      LEFT JOIN users u ON pc.reviewed_by = u.id
-      WHERE pc.pip_id = ?
-      ORDER BY pc.checkpoint_date DESC
-    `).all(pip.id);
-
-    pip.checkpoints = checkpoints;
 
     res.json(pip);
   } catch (error) {
@@ -301,80 +336,139 @@ router.get('/pips/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Create PIP
+router.get('/pips/:id', authenticateToken, async (req, res) => {
+  try {
+    const { data: pip, error } = await supabase
+      .from('pips')
+      .select('*, user:users!user_id(name, email, department, designation), manager:users!manager_id(name)')
+      .eq('id', req.params.id)
+      .single();
+
+    if (error) throw error;
+    if (!pip) return res.status(404).json({ error: 'PIP not found' });
+
+    const { data: checkpoints } = await supabase
+      .from('pip_checkpoints')
+      .select('*, reviewer:users!reviewed_by(name)')
+      .eq('pip_id', pip.id)
+      .order('checkpoint_date', { ascending: false });
+
+    res.json({
+      ...pip,
+      user_name: pip.user?.name,
+      user_email: pip.user?.email,
+      department: pip.user?.department,
+      designation: pip.user?.designation,
+      manager_name: pip.manager?.name,
+      checkpoints: (checkpoints || []).map(c => ({
+        ...c,
+        reviewed_by_name: c.reviewer?.name,
+        reviewer: undefined
+      })),
+      user: undefined,
+      manager: undefined
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/pips', authenticateToken, async (req, res) => {
   try {
     const { user_id, start_date, end_date, reason, goals } = req.body;
     const id = `pip-${uuidv4()}`;
 
-    await db.prepare(`
-      INSERT INTO pips (id, user_id, manager_id, start_date, end_date, reason, goals)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, user_id, req.user.id, start_date, end_date, reason, JSON.stringify(goals || []));
+    const { data, error } = await supabase
+      .from('pips')
+      .insert({
+        id,
+        user_id,
+        manager_id: req.user.id,
+        start_date,
+        end_date,
+        reason,
+        goals: JSON.stringify(goals || [])
+      })
+      .select()
+      .single();
 
-    const pip = await db.prepare('SELECT * FROM pips WHERE id = ?').get(id);
-    res.status(201).json(pip);
+    if (error) throw error;
+    res.status(201).json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Update PIP
 router.put('/pips/:id', authenticateToken, async (req, res) => {
   try {
     const { end_date, reason, goals, status, outcome } = req.body;
 
-    await db.prepare(`
-      UPDATE pips
-      SET end_date = COALESCE(?, end_date),
-          reason = COALESCE(?, reason),
-          goals = COALESCE(?, goals),
-          status = COALESCE(?, status),
-          outcome = COALESCE(?, outcome)
-      WHERE id = ?
-    `).run(end_date, reason, goals ? JSON.stringify(goals) : null, status, outcome, req.params.id);
+    const updateData = {};
+    if (end_date !== undefined) updateData.end_date = end_date;
+    if (reason !== undefined) updateData.reason = reason;
+    if (goals !== undefined) updateData.goals = JSON.stringify(goals);
+    if (status !== undefined) updateData.status = status;
+    if (outcome !== undefined) updateData.outcome = outcome;
 
-    const pip = await db.prepare('SELECT * FROM pips WHERE id = ?').get(req.params.id);
-    res.json(pip);
+    const { data, error } = await supabase
+      .from('pips')
+      .update(updateData)
+      .eq('id', req.params.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Add PIP checkpoint
 router.post('/pips/:id/checkpoints', authenticateToken, async (req, res) => {
   try {
     const { checkpoint_date, progress_notes, rating } = req.body;
     const id = `pipc-${uuidv4()}`;
 
-    await db.prepare(`
-      INSERT INTO pip_checkpoints (id, pip_id, checkpoint_date, progress_notes, rating, reviewed_by)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, req.params.id, checkpoint_date, progress_notes, rating, req.user.id);
+    const { data, error } = await supabase
+      .from('pip_checkpoints')
+      .insert({
+        id,
+        pip_id: req.params.id,
+        checkpoint_date,
+        progress_notes,
+        rating,
+        reviewed_by: req.user.id
+      })
+      .select('*, reviewer:users!reviewed_by(name)')
+      .single();
 
-    const checkpoint = await db.prepare(`
-      SELECT pc.*, u.name as reviewed_by_name
-      FROM pip_checkpoints pc
-      LEFT JOIN users u ON pc.reviewed_by = u.id
-      WHERE pc.id = ?
-    `).get(id);
+    if (error) throw error;
 
-    res.status(201).json(checkpoint);
+    res.status(201).json({
+      ...data,
+      reviewed_by_name: data.reviewer?.name,
+      reviewer: undefined
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Get PIP checkpoints
 router.get('/pips/:id/checkpoints', authenticateToken, async (req, res) => {
   try {
-    const checkpoints = await db.prepare(`
-      SELECT pc.*, u.name as reviewed_by_name
-      FROM pip_checkpoints pc
-      LEFT JOIN users u ON pc.reviewed_by = u.id
-      WHERE pc.pip_id = ?
-      ORDER BY pc.checkpoint_date DESC
-    `).all(req.params.id);
+    const { data, error } = await supabase
+      .from('pip_checkpoints')
+      .select('*, reviewer:users!reviewed_by(name)')
+      .eq('pip_id', req.params.id)
+      .order('checkpoint_date', { ascending: false });
+
+    if (error) throw error;
+
+    const checkpoints = data.map(c => ({
+      ...c,
+      reviewed_by_name: c.reviewer?.name,
+      reviewer: undefined
+    }));
 
     res.json(checkpoints);
   } catch (error) {
@@ -386,19 +480,24 @@ router.get('/pips/:id/checkpoints', authenticateToken, async (req, res) => {
 // RECOGNITIONS
 // ==========================================
 
-// Get all recognitions
 router.get('/recognitions', authenticateToken, async (req, res) => {
   try {
-    const recognitions = await db.prepare(`
-      SELECT r.*,
-             rec.name as recipient_name, rec.department as recipient_department,
-             nom.name as nominator_name
-      FROM recognitions r
-      JOIN users rec ON r.recipient_id = rec.id
-      JOIN users nom ON r.nominator_id = nom.id
-      WHERE r.is_public = 1
-      ORDER BY r.created_at DESC
-    `).all();
+    const { data, error } = await supabase
+      .from('recognitions')
+      .select('*, recipient:users!recipient_id(name, department), nominator:users!nominator_id(name)')
+      .eq('is_public', 1)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const recognitions = data.map(r => ({
+      ...r,
+      recipient_name: r.recipient?.name,
+      recipient_department: r.recipient?.department,
+      nominator_name: r.nominator?.name,
+      recipient: undefined,
+      nominator: undefined
+    }));
 
     res.json(recognitions);
   } catch (error) {
@@ -406,16 +505,21 @@ router.get('/recognitions', authenticateToken, async (req, res) => {
   }
 });
 
-// Get my recognitions
 router.get('/recognitions/my-recognitions', authenticateToken, async (req, res) => {
   try {
-    const recognitions = await db.prepare(`
-      SELECT r.*, nom.name as nominator_name
-      FROM recognitions r
-      JOIN users nom ON r.nominator_id = nom.id
-      WHERE r.recipient_id = ?
-      ORDER BY r.created_at DESC
-    `).all(req.user.id);
+    const { data, error } = await supabase
+      .from('recognitions')
+      .select('*, nominator:users!nominator_id(name)')
+      .eq('recipient_id', req.user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    const recognitions = data.map(r => ({
+      ...r,
+      nominator_name: r.nominator?.name,
+      nominator: undefined
+    }));
 
     res.json(recognitions);
   } catch (error) {
@@ -423,37 +527,50 @@ router.get('/recognitions/my-recognitions', authenticateToken, async (req, res) 
   }
 });
 
-// Create recognition
 router.post('/recognitions', authenticateToken, async (req, res) => {
   try {
     const { recipient_id, type, badge, title, message, is_public } = req.body;
     const id = `rec-${uuidv4()}`;
 
-    await db.prepare(`
-      INSERT INTO recognitions (id, recipient_id, nominator_id, type, badge, title, message, is_public)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, recipient_id, req.user.id, type, badge, title, message, is_public !== false ? 1 : 0);
+    const { data, error } = await supabase
+      .from('recognitions')
+      .insert({
+        id,
+        recipient_id,
+        nominator_id: req.user.id,
+        type,
+        badge,
+        title,
+        message,
+        is_public: is_public !== false ? 1 : 0
+      })
+      .select('*, recipient:users!recipient_id(name, department), nominator:users!nominator_id(name)')
+      .single();
 
-    const recognition = await db.prepare(`
-      SELECT r.*,
-             rec.name as recipient_name, rec.department as recipient_department,
-             nom.name as nominator_name
-      FROM recognitions r
-      JOIN users rec ON r.recipient_id = rec.id
-      JOIN users nom ON r.nominator_id = nom.id
-      WHERE r.id = ?
-    `).get(id);
+    if (error) throw error;
 
-    res.status(201).json(recognition);
+    res.status(201).json({
+      ...data,
+      recipient_name: data.recipient?.name,
+      recipient_department: data.recipient?.department,
+      nominator_name: data.nominator?.name,
+      recipient: undefined,
+      nominator: undefined
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Delete recognition
 router.delete('/recognitions/:id', authenticateToken, async (req, res) => {
   try {
-    await db.prepare('DELETE FROM recognitions WHERE id = ? AND nominator_id = ?').run(req.params.id, req.user.id);
+    const { error } = await supabase
+      .from('recognitions')
+      .delete()
+      .eq('id', req.params.id)
+      .eq('nominator_id', req.user.id);
+
+    if (error) throw error;
     res.json({ message: 'Recognition deleted' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -461,52 +578,49 @@ router.delete('/recognitions/:id', authenticateToken, async (req, res) => {
 });
 
 // ==========================================
-// DASHBOARD STATS
+// DASHBOARD
 // ==========================================
 
-// Get performance dashboard stats
 router.get('/dashboard', authenticateToken, async (req, res) => {
   try {
     const stats = {};
 
     // KPI stats
-    const kpiStats = await db.prepare(`
-      SELECT
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'achieved' THEN 1 ELSE 0 END) as achieved,
-        SUM(CASE WHEN status = 'on_track' THEN 1 ELSE 0 END) as on_track,
-        SUM(CASE WHEN status = 'at_risk' THEN 1 ELSE 0 END) as at_risk,
-        SUM(CASE WHEN status = 'behind' THEN 1 ELSE 0 END) as behind
-      FROM kpis
-    `).get();
-
-    stats.kpis = kpiStats;
+    const { data: kpis } = await supabase.from('kpis').select('status');
+    stats.kpis = {
+      total: kpis?.length || 0,
+      achieved: kpis?.filter(k => k.status === 'achieved').length || 0,
+      on_track: kpis?.filter(k => k.status === 'on_track').length || 0,
+      at_risk: kpis?.filter(k => k.status === 'at_risk').length || 0,
+      behind: kpis?.filter(k => k.status === 'behind').length || 0
+    };
 
     // Active PIPs
-    const activePips = await db.prepare(`
-      SELECT COUNT(*) as count FROM pips WHERE status = 'active'
-    `).get();
+    const { count: activePips } = await supabase
+      .from('pips')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'active');
+    stats.activePips = activePips || 0;
 
-    stats.activePips = activePips ? activePips.count : 0;
+    // Recent recognitions
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const { count: recentRecs } = await supabase
+      .from('recognitions')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', thirtyDaysAgo.toISOString());
+    stats.recentRecognitions = recentRecs || 0;
 
-    // Recent recognitions count
-    const recentRecognitions = await db.prepare(`
-      SELECT COUNT(*) as count FROM recognitions
-      WHERE created_at >= datetime('now', '-30 days')
-    `).get();
-
-    stats.recentRecognitions = recentRecognitions ? recentRecognitions.count : 0;
-
-    // Goals progress
-    const goalsStats = await db.prepare(`
-      SELECT
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
-        AVG(progress) as avg_progress
-      FROM goals WHERE status = 'active'
-    `).get();
-
-    stats.goals = goalsStats;
+    // Goals stats
+    const { data: goals } = await supabase
+      .from('goals')
+      .select('status, progress')
+      .eq('status', 'active');
+    stats.goals = {
+      total: goals?.length || 0,
+      completed: goals?.filter(g => g.status === 'completed').length || 0,
+      avg_progress: goals?.length ? goals.reduce((a, g) => a + (g.progress || 0), 0) / goals.length : 0
+    };
 
     res.json(stats);
   } catch (error) {

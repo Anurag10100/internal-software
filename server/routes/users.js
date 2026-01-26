@@ -1,18 +1,24 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { db } = require('../config/database');
+const { createClient } = require('@supabase/supabase-js');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
 // Get all users
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const users = await db.prepare(`
-      SELECT id, name, email, department, designation, role, avatar, created_at
-      FROM users
-      ORDER BY name
-    `).all();
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('id, name, email, department, designation, role, avatar, created_at')
+      .order('name');
+
+    if (error) throw error;
 
     res.json({ users });
   } catch (error) {
@@ -24,22 +30,12 @@ router.get('/', authenticateToken, async (req, res) => {
 // Get team members with additional info
 router.get('/team', authenticateToken, async (req, res) => {
   try {
-    const members = await db.prepare(`
-      SELECT
-        u.id,
-        u.name,
-        u.email,
-        u.department,
-        u.designation,
-        u.role,
-        u.created_at,
-        tm.profile,
-        tm.in_probation,
-        tm.status
-      FROM users u
-      LEFT JOIN team_members tm ON u.id = tm.user_id
-      ORDER BY u.name
-    `).all();
+    const { data: members, error } = await supabase
+      .from('users')
+      .select('id, name, email, department, designation, role, created_at, team_members!left(profile, in_probation, status)')
+      .order('name');
+
+    if (error) throw error;
 
     const formattedMembers = members.map(m => ({
       id: m.id,
@@ -48,9 +44,9 @@ router.get('/team', authenticateToken, async (req, res) => {
       department: m.department,
       designation: m.designation,
       role: m.role,
-      profile: m.profile || 'Standard',
-      inProbation: m.in_probation === 1,
-      status: m.status || 'Active',
+      profile: m.team_members?.[0]?.profile || 'Standard',
+      inProbation: m.team_members?.[0]?.in_probation === 1,
+      status: m.team_members?.[0]?.status || 'Active',
       createdAt: m.created_at,
     }));
 
@@ -70,7 +66,12 @@ router.post('/team', authenticateToken, requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Name, email, password, and department are required' });
     }
 
-    const existingUser = await db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .single();
+
     if (existingUser) {
       return res.status(400).json({ error: 'Email already registered' });
     }
@@ -78,15 +79,31 @@ router.post('/team', authenticateToken, requireAdmin, async (req, res) => {
     const hashedPassword = bcrypt.hashSync(password, 10);
     const userId = `user-${Date.now()}`;
 
-    await db.prepare(`
-      INSERT INTO users (id, name, email, password, department, designation, role)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, name, email, hashedPassword, department, designation || '', role);
+    const { error: userError } = await supabase
+      .from('users')
+      .insert({
+        id: userId,
+        name,
+        email,
+        password: hashedPassword,
+        department,
+        designation: designation || '',
+        role
+      });
 
-    await db.prepare(`
-      INSERT INTO team_members (id, user_id, profile, in_probation, status)
-      VALUES (?, ?, ?, 1, 'Active')
-    `).run(`tm-${Date.now()}`, userId, profile || 'Standard');
+    if (userError) throw userError;
+
+    const { error: tmError } = await supabase
+      .from('team_members')
+      .insert({
+        id: `tm-${Date.now()}`,
+        user_id: userId,
+        profile: profile || 'Standard',
+        in_probation: 1,
+        status: 'Active'
+      });
+
+    if (tmError) throw tmError;
 
     res.status(201).json({
       message: 'Team member added successfully',
@@ -114,40 +131,54 @@ router.put('/team/:id', authenticateToken, requireAdmin, async (req, res) => {
     const { id } = req.params;
     const { name, email, department, designation, profile, status, inProbation } = req.body;
 
-    const existingUser = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-    if (!existingUser) {
+    const { data: existingUser, error: findError } = await supabase
+      .from('users')
+      .select()
+      .eq('id', id)
+      .single();
+
+    if (findError || !existingUser) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     // Update users table
-    await db.prepare(`
-      UPDATE users SET
-        name = COALESCE(?, name),
-        email = COALESCE(?, email),
-        department = COALESCE(?, department),
-        designation = COALESCE(?, designation)
-      WHERE id = ?
-    `).run(name, email, department, designation, id);
+    const userUpdate = {};
+    if (name !== undefined) userUpdate.name = name;
+    if (email !== undefined) userUpdate.email = email;
+    if (department !== undefined) userUpdate.department = department;
+    if (designation !== undefined) userUpdate.designation = designation;
+
+    if (Object.keys(userUpdate).length > 0) {
+      const { error } = await supabase
+        .from('users')
+        .update(userUpdate)
+        .eq('id', id);
+
+      if (error) throw error;
+    }
 
     // Update team_members table
     if (profile !== undefined || status !== undefined || inProbation !== undefined) {
-      await db.prepare(`
-        UPDATE team_members SET
-          profile = COALESCE(?, profile),
-          status = COALESCE(?, status),
-          in_probation = COALESCE(?, in_probation)
-        WHERE user_id = ?
-      `).run(profile, status, inProbation !== undefined ? (inProbation ? 1 : 0) : undefined, id);
+      const tmUpdate = {};
+      if (profile !== undefined) tmUpdate.profile = profile;
+      if (status !== undefined) tmUpdate.status = status;
+      if (inProbation !== undefined) tmUpdate.in_probation = inProbation ? 1 : 0;
+
+      const { error } = await supabase
+        .from('team_members')
+        .update(tmUpdate)
+        .eq('user_id', id);
+
+      if (error) throw error;
     }
 
-    const updatedUser = await db.prepare(`
-      SELECT
-        u.id, u.name, u.email, u.department, u.designation, u.role,
-        tm.profile, tm.in_probation, tm.status
-      FROM users u
-      LEFT JOIN team_members tm ON u.id = tm.user_id
-      WHERE u.id = ?
-    `).get(id);
+    const { data: updatedUser, error: getError } = await supabase
+      .from('users')
+      .select('id, name, email, department, designation, role, team_members!left(profile, in_probation, status)')
+      .eq('id', id)
+      .single();
+
+    if (getError) throw getError;
 
     res.json({
       message: 'Team member updated successfully',
@@ -158,9 +189,9 @@ router.put('/team/:id', authenticateToken, requireAdmin, async (req, res) => {
         department: updatedUser.department,
         designation: updatedUser.designation,
         role: updatedUser.role,
-        profile: updatedUser.profile,
-        inProbation: updatedUser.in_probation === 1,
-        status: updatedUser.status,
+        profile: updatedUser.team_members?.[0]?.profile,
+        inProbation: updatedUser.team_members?.[0]?.in_probation === 1,
+        status: updatedUser.team_members?.[0]?.status,
       },
     });
   } catch (error) {
@@ -174,26 +205,26 @@ router.delete('/team/:id', authenticateToken, requireAdmin, async (req, res) => 
   try {
     const { id } = req.params;
 
-    const existingUser = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-    if (!existingUser) {
+    const { data: existingUser, error: findError } = await supabase
+      .from('users')
+      .select()
+      .eq('id', id)
+      .single();
+
+    if (findError || !existingUser) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Don't allow deleting yourself
     if (id === req.user.id) {
       return res.status(400).json({ error: 'Cannot delete yourself' });
     }
 
-    // Delete from team_members first (foreign key)
-    await db.prepare('DELETE FROM team_members WHERE user_id = ?').run(id);
-    // Delete related tasks
-    await db.prepare('DELETE FROM tasks WHERE assigned_to_user_id = ? OR assigned_by_user_id = ?').run(id, id);
-    // Delete related leave requests
-    await db.prepare('DELETE FROM leave_requests WHERE user_id = ?').run(id);
-    // Delete related check-ins
-    await db.prepare('DELETE FROM check_ins WHERE user_id = ?').run(id);
-    // Delete user
-    await db.prepare('DELETE FROM users WHERE id = ?').run(id);
+    // Delete related records
+    await supabase.from('team_members').delete().eq('user_id', id);
+    await supabase.from('tasks').delete().or(`assigned_to_user_id.eq.${id},assigned_by_user_id.eq.${id}`);
+    await supabase.from('leave_requests').delete().eq('user_id', id);
+    await supabase.from('check_ins').delete().eq('user_id', id);
+    await supabase.from('users').delete().eq('id', id);
 
     res.json({ message: 'Team member deleted successfully' });
   } catch (error) {
@@ -207,17 +238,24 @@ router.put('/profile', authenticateToken, async (req, res) => {
   try {
     const { name, avatar } = req.body;
 
-    await db.prepare(`
-      UPDATE users SET
-        name = COALESCE(?, name),
-        avatar = COALESCE(?, avatar)
-      WHERE id = ?
-    `).run(name, avatar, req.user.id);
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (avatar !== undefined) updateData.avatar = avatar;
 
-    const updatedUser = await db.prepare(`
-      SELECT id, name, email, department, designation, role, avatar
-      FROM users WHERE id = ?
-    `).get(req.user.id);
+    const { error } = await supabase
+      .from('users')
+      .update(updateData)
+      .eq('id', req.user.id);
+
+    if (error) throw error;
+
+    const { data: updatedUser, error: getError } = await supabase
+      .from('users')
+      .select('id, name, email, department, designation, role, avatar')
+      .eq('id', req.user.id)
+      .single();
+
+    if (getError) throw getError;
 
     res.json({
       message: 'Profile updated successfully',

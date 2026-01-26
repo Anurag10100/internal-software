@@ -1,32 +1,32 @@
 const express = require('express');
-const { db } = require('../config/database');
+const { createClient } = require('@supabase/supabase-js');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
 // Get all tasks (with user info)
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const tasks = await db.prepare(`
-      SELECT
-        t.*,
-        assignedBy.name as assigned_by_name,
-        assignedTo.name as assigned_to_name
-      FROM tasks t
-      LEFT JOIN users assignedBy ON t.assigned_by_user_id = assignedBy.id
-      LEFT JOIN users assignedTo ON t.assigned_to_user_id = assignedTo.id
-      ORDER BY t.created_at DESC
-    `).all();
+    const { data: tasks, error } = await supabase
+      .from('tasks')
+      .select('*, assignedBy:users!assigned_by_user_id(name), assignedTo:users!assigned_to_user_id(name)')
+      .order('created_at', { ascending: false });
 
-    // Transform to match frontend format
+    if (error) throw error;
+
     const formattedTasks = tasks.map(t => ({
       id: t.id,
       title: t.title,
       description: t.description,
-      assignedBy: t.assigned_by_name,
+      assignedBy: t.assignedBy?.name,
       assignedByUserId: t.assigned_by_user_id,
       assignedTo: t.assigned_to_user_id,
-      assignedToName: t.assigned_to_name,
+      assignedToName: t.assignedTo?.name,
       dueDate: t.due_date,
       dueTime: t.due_time,
       status: t.status,
@@ -45,21 +45,19 @@ router.get('/', authenticateToken, async (req, res) => {
 // Get my tasks (assigned to me)
 router.get('/my-tasks', authenticateToken, async (req, res) => {
   try {
-    const tasks = await db.prepare(`
-      SELECT
-        t.*,
-        assignedBy.name as assigned_by_name
-      FROM tasks t
-      LEFT JOIN users assignedBy ON t.assigned_by_user_id = assignedBy.id
-      WHERE t.assigned_to_user_id = ?
-      ORDER BY t.created_at DESC
-    `).all(req.user.id);
+    const { data: tasks, error } = await supabase
+      .from('tasks')
+      .select('*, assignedBy:users!assigned_by_user_id(name)')
+      .eq('assigned_to_user_id', req.user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
 
     const formattedTasks = tasks.map(t => ({
       id: t.id,
       title: t.title,
       description: t.description,
-      assignedBy: t.assigned_by_name,
+      assignedBy: t.assignedBy?.name,
       assignedByUserId: t.assigned_by_user_id,
       assignedTo: t.assigned_to_user_id,
       dueDate: t.due_date,
@@ -80,15 +78,13 @@ router.get('/my-tasks', authenticateToken, async (req, res) => {
 // Get delegated tasks (assigned by me)
 router.get('/delegated', authenticateToken, async (req, res) => {
   try {
-    const tasks = await db.prepare(`
-      SELECT
-        t.*,
-        assignedTo.name as assigned_to_name
-      FROM tasks t
-      LEFT JOIN users assignedTo ON t.assigned_to_user_id = assignedTo.id
-      WHERE t.assigned_by_user_id = ?
-      ORDER BY t.created_at DESC
-    `).all(req.user.id);
+    const { data: tasks, error } = await supabase
+      .from('tasks')
+      .select('*, assignedTo:users!assigned_to_user_id(name)')
+      .eq('assigned_by_user_id', req.user.id)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
 
     const formattedTasks = tasks.map(t => ({
       id: t.id,
@@ -97,7 +93,7 @@ router.get('/delegated', authenticateToken, async (req, res) => {
       assignedBy: req.user.name,
       assignedByUserId: t.assigned_by_user_id,
       assignedTo: t.assigned_to_user_id,
-      assignedToName: t.assigned_to_name,
+      assignedToName: t.assignedTo?.name,
       dueDate: t.due_date,
       dueTime: t.due_time,
       status: t.status,
@@ -125,12 +121,24 @@ router.post('/', authenticateToken, async (req, res) => {
     const taskId = `task-${Date.now()}`;
     const tagsString = Array.isArray(tags) ? tags.join(',') : (tags || '');
 
-    await db.prepare(`
-      INSERT INTO tasks (id, title, description, assigned_by_user_id, assigned_to_user_id, due_date, due_time, status, priority, tags)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-    `).run(taskId, title, description || '', req.user.id, assignedTo, dueDate, dueTime, priority || 'medium', tagsString);
+    const { data: task, error } = await supabase
+      .from('tasks')
+      .insert({
+        id: taskId,
+        title,
+        description: description || '',
+        assigned_by_user_id: req.user.id,
+        assigned_to_user_id: assignedTo,
+        due_date: dueDate,
+        due_time: dueTime,
+        status: 'pending',
+        priority: priority || 'medium',
+        tags: tagsString
+      })
+      .select()
+      .single();
 
-    const task = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId);
+    if (error) throw error;
 
     res.status(201).json({
       message: 'Task created successfully',
@@ -151,26 +159,35 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const { id } = req.params;
     const { title, description, status, priority, dueDate, dueTime, tags } = req.body;
 
-    const existingTask = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
-    if (!existingTask) {
+    const { data: existingTask, error: findError } = await supabase
+      .from('tasks')
+      .select()
+      .eq('id', id)
+      .single();
+
+    if (findError || !existingTask) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
     const tagsString = Array.isArray(tags) ? tags.join(',') : (tags !== undefined ? tags : existingTask.tags);
 
-    await db.prepare(`
-      UPDATE tasks SET
-        title = COALESCE(?, title),
-        description = COALESCE(?, description),
-        status = COALESCE(?, status),
-        priority = COALESCE(?, priority),
-        due_date = COALESCE(?, due_date),
-        due_time = COALESCE(?, due_time),
-        tags = ?
-      WHERE id = ?
-    `).run(title, description, status, priority, dueDate, dueTime, tagsString, id);
+    const updateData = {};
+    if (title !== undefined) updateData.title = title;
+    if (description !== undefined) updateData.description = description;
+    if (status !== undefined) updateData.status = status;
+    if (priority !== undefined) updateData.priority = priority;
+    if (dueDate !== undefined) updateData.due_date = dueDate;
+    if (dueTime !== undefined) updateData.due_time = dueTime;
+    updateData.tags = tagsString;
 
-    const updatedTask = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
+    const { data: updatedTask, error } = await supabase
+      .from('tasks')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
 
     res.json({
       message: 'Task updated successfully',
@@ -190,12 +207,22 @@ router.delete('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
-    const existingTask = await db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
-    if (!existingTask) {
+    const { data: existingTask, error: findError } = await supabase
+      .from('tasks')
+      .select()
+      .eq('id', id)
+      .single();
+
+    if (findError || !existingTask) {
       return res.status(404).json({ error: 'Task not found' });
     }
 
-    await db.prepare('DELETE FROM tasks WHERE id = ?').run(id);
+    const { error } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
 
     res.json({ message: 'Task deleted successfully' });
   } catch (error) {
