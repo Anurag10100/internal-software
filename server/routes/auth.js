@@ -1,13 +1,13 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { db } = require('../config/database');
+const { query, insert, getById } = require('../config/db');
 const { JWT_SECRET, authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
 // Login
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -15,7 +15,7 @@ router.post('/login', (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    const user = await query('users', { eq: { email }, single: true });
 
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
@@ -47,9 +47,13 @@ router.post('/login', (req, res) => {
 });
 
 // Get current user
-router.get('/me', authenticateToken, (req, res) => {
+router.get('/me', authenticateToken, async (req, res) => {
   try {
-    const user = db.prepare('SELECT id, name, email, department, designation, role, avatar, created_at FROM users WHERE id = ?').get(req.user.id);
+    const user = await query('users', {
+      select: 'id, name, email, department, designation, role, avatar, created_at',
+      eq: { id: req.user.id },
+      single: true
+    });
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -63,7 +67,7 @@ router.get('/me', authenticateToken, (req, res) => {
 });
 
 // Register (admin only in real app, but open for demo)
-router.post('/register', (req, res) => {
+router.post('/register', async (req, res) => {
   try {
     const { name, email, password, department, designation, role = 'employee' } = req.body;
 
@@ -71,24 +75,34 @@ router.post('/register', (req, res) => {
       return res.status(400).json({ error: 'Name, email, password, and department are required' });
     }
 
-    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    const existingUser = await query('users', { eq: { email }, single: true });
     if (existingUser) {
       return res.status(400).json({ error: 'Email already registered' });
     }
 
     const hashedPassword = bcrypt.hashSync(password, 10);
     const userId = `user-${Date.now()}`;
+    const teamMemberId = `tm-${Date.now()}`;
 
-    db.prepare(`
-      INSERT INTO users (id, name, email, password, department, designation, role)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, name, email, hashedPassword, department, designation || '', role);
+    // Insert user
+    await insert('users', {
+      id: userId,
+      name,
+      email,
+      password: hashedPassword,
+      department,
+      designation: designation || '',
+      role
+    });
 
     // Also add to team members
-    db.prepare(`
-      INSERT INTO team_members (id, user_id, profile, in_probation, status)
-      VALUES (?, ?, 'Standard', 1, 'Active')
-    `).run(`tm-${Date.now()}`, userId);
+    await insert('team_members', {
+      id: teamMemberId,
+      user_id: userId,
+      profile: 'Standard',
+      in_probation: 1,
+      status: 'Active'
+    });
 
     const token = jwt.sign(
       { id: userId, email, role },
