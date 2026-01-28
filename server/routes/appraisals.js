@@ -1,13 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const { createClient } = require('@supabase/supabase-js');
+const { getSupabaseClient } = require('../config/supabase');
 const { authenticateToken } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+router.use((req, res, next) => {
+  const supabase = getSupabaseClient();
+  if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+  req.supabase = supabase;
+  next();
+});
 
 // ==========================================
 // APPRAISAL CYCLES
@@ -16,7 +18,7 @@ const supabase = createClient(
 // Get all cycles
 router.get('/cycles', authenticateToken, async (req, res) => {
   try {
-    const { data: cycles, error } = await supabase
+    const { data: cycles, error } = await req.supabase
       .from('appraisal_cycles')
       .select('*, creator:users!created_by(name)')
       .order('start_date', { ascending: false });
@@ -40,7 +42,7 @@ router.post('/cycles', authenticateToken, async (req, res) => {
     const { name, type, start_date, end_date } = req.body;
     const id = `cycle-${uuidv4()}`;
 
-    const { data: cycle, error } = await supabase
+    const { data: cycle, error } = await req.supabase
       .from('appraisal_cycles')
       .insert({ id, name, type, start_date, end_date, created_by: req.user.id })
       .select()
@@ -65,7 +67,7 @@ router.put('/cycles/:id', authenticateToken, async (req, res) => {
     if (end_date !== undefined) updateData.end_date = end_date;
     if (status !== undefined) updateData.status = status;
 
-    const { data: cycle, error } = await supabase
+    const { data: cycle, error } = await req.supabase
       .from('appraisal_cycles')
       .update(updateData)
       .eq('id', req.params.id)
@@ -82,7 +84,7 @@ router.put('/cycles/:id', authenticateToken, async (req, res) => {
 // Activate cycle and create appraisals for all employees
 router.post('/cycles/:id/activate', authenticateToken, async (req, res) => {
   try {
-    const { data: cycle } = await supabase
+    const { data: cycle } = await req.supabase
       .from('appraisal_cycles')
       .select()
       .eq('id', req.params.id)
@@ -92,17 +94,17 @@ router.post('/cycles/:id/activate', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Cycle not found' });
     }
 
-    await supabase
+    await req.supabase
       .from('appraisal_cycles')
       .update({ status: 'active' })
       .eq('id', req.params.id);
 
-    const { data: employees } = await supabase
+    const { data: employees } = await req.supabase
       .from('users')
       .select('id')
       .eq('role', 'employee');
 
-    const { data: admin } = await supabase
+    const { data: admin } = await req.supabase
       .from('users')
       .select('id')
       .eq('role', 'admin')
@@ -111,7 +113,7 @@ router.post('/cycles/:id/activate', authenticateToken, async (req, res) => {
 
     for (const emp of employees || []) {
       const appraisalId = `appr-${uuidv4()}`;
-      await supabase
+      await req.supabase
         .from('appraisals')
         .insert({
           id: appraisalId,
@@ -135,7 +137,7 @@ router.post('/cycles/:id/activate', authenticateToken, async (req, res) => {
 // Get all appraisals (admin)
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const { data: appraisals, error } = await supabase
+    const { data: appraisals, error } = await req.supabase
       .from('appraisals')
       .select(`
         *,
@@ -167,7 +169,7 @@ router.get('/', authenticateToken, async (req, res) => {
 // Get my appraisals
 router.get('/my-appraisals', authenticateToken, async (req, res) => {
   try {
-    const { data: appraisals, error } = await supabase
+    const { data: appraisals, error } = await req.supabase
       .from('appraisals')
       .select(`
         *,
@@ -200,7 +202,7 @@ router.get('/my-appraisals', authenticateToken, async (req, res) => {
 // Get appraisals to review (as manager)
 router.get('/to-review', authenticateToken, async (req, res) => {
   try {
-    const { data: appraisals, error } = await supabase
+    const { data: appraisals, error } = await req.supabase
       .from('appraisals')
       .select(`
         *,
@@ -232,7 +234,7 @@ router.get('/to-review', authenticateToken, async (req, res) => {
 // Get single appraisal
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
-    const { data: appraisal, error } = await supabase
+    const { data: appraisal, error } = await req.supabase
       .from('appraisals')
       .select(`
         *,
@@ -247,12 +249,12 @@ router.get('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Appraisal not found' });
     }
 
-    const { data: goals } = await supabase
+    const { data: goals } = await req.supabase
       .from('goals')
       .select()
       .or(`appraisal_id.eq.${req.params.id},and(user_id.eq.${appraisal.employee_id},appraisal_id.is.null)`);
 
-    const { data: feedback } = await supabase
+    const { data: feedback } = await req.supabase
       .from('feedback_360')
       .select('*, reviewer:users!reviewer_id(name)')
       .eq('appraisal_id', req.params.id);
@@ -286,7 +288,7 @@ router.post('/:id/self-review', authenticateToken, async (req, res) => {
   try {
     const { self_rating, self_comments } = req.body;
 
-    const { data: appraisal, error } = await supabase
+    const { data: appraisal, error } = await req.supabase
       .from('appraisals')
       .update({
         self_rating,
@@ -311,7 +313,7 @@ router.post('/:id/manager-review', authenticateToken, async (req, res) => {
   try {
     const { manager_rating, manager_comments, final_rating } = req.body;
 
-    const { data: appraisal, error } = await supabase
+    const { data: appraisal, error } = await req.supabase
       .from('appraisals')
       .update({
         manager_rating,
@@ -339,7 +341,7 @@ router.post('/:id/manager-review', authenticateToken, async (req, res) => {
 // Get all goals
 router.get('/goals/all', authenticateToken, async (req, res) => {
   try {
-    const { data: goals, error } = await supabase
+    const { data: goals, error } = await req.supabase
       .from('goals')
       .select('*, user:users!user_id(name, department)')
       .order('created_at', { ascending: false });
@@ -361,7 +363,7 @@ router.get('/goals/all', authenticateToken, async (req, res) => {
 // Get my goals
 router.get('/goals/my-goals', authenticateToken, async (req, res) => {
   try {
-    const { data: goals, error } = await supabase
+    const { data: goals, error } = await req.supabase
       .from('goals')
       .select()
       .eq('user_id', req.user.id)
@@ -380,7 +382,7 @@ router.post('/goals', authenticateToken, async (req, res) => {
     const { user_id, appraisal_id, title, description, category, target_date, weightage } = req.body;
     const id = `goal-${uuidv4()}`;
 
-    const { data: goal, error } = await supabase
+    const { data: goal, error } = await req.supabase
       .from('goals')
       .insert({
         id,
@@ -418,7 +420,7 @@ router.put('/goals/:id', authenticateToken, async (req, res) => {
     if (self_rating !== undefined) updateData.self_rating = self_rating;
     if (manager_rating !== undefined) updateData.manager_rating = manager_rating;
 
-    const { data: goal, error } = await supabase
+    const { data: goal, error } = await req.supabase
       .from('goals')
       .update(updateData)
       .eq('id', req.params.id)
@@ -435,7 +437,7 @@ router.put('/goals/:id', authenticateToken, async (req, res) => {
 // Delete goal
 router.delete('/goals/:id', authenticateToken, async (req, res) => {
   try {
-    const { error } = await supabase
+    const { error } = await req.supabase
       .from('goals')
       .delete()
       .eq('id', req.params.id);
@@ -454,7 +456,7 @@ router.delete('/goals/:id', authenticateToken, async (req, res) => {
 // Get feedback for appraisal
 router.get('/:id/feedback', authenticateToken, async (req, res) => {
   try {
-    const { data: feedback, error } = await supabase
+    const { data: feedback, error } = await req.supabase
       .from('feedback_360')
       .select('*, reviewer:users!reviewer_id(name)')
       .eq('appraisal_id', req.params.id);
@@ -478,7 +480,7 @@ router.post('/:id/feedback', authenticateToken, async (req, res) => {
     const { reviewer_type, rating, strengths, improvements, comments, is_anonymous } = req.body;
     const id = `fb-${uuidv4()}`;
 
-    const { data: feedback, error } = await supabase
+    const { data: feedback, error } = await req.supabase
       .from('feedback_360')
       .insert({
         id,

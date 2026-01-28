@@ -1,52 +1,30 @@
-// Supabase Configuration and Client
+// Supabase Configuration and Client (main HRMS backend)
+// Uses SERVICE_ROLE_KEY only - one client for all server-side operations.
 const { createClient } = require('@supabase/supabase-js');
 
-// Supabase connection settings
 const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_ANON_KEY;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-// Validate environment variables
-if (!supabaseUrl || !supabaseKey) {
-  console.warn('Warning: Supabase credentials not found. Using SQLite fallback.');
-}
-
-// Create Supabase client for general use (respects RLS)
-const supabase = supabaseUrl && supabaseKey
-  ? createClient(supabaseUrl, supabaseKey, {
-      auth: {
-        autoRefreshToken: true,
-        persistSession: false
-      }
-    })
-  : null;
-
-// Create Supabase admin client (bypasses RLS - use carefully)
-const supabaseAdmin = supabaseUrl && supabaseServiceKey
+// Single server-side client (bypasses RLS)
+const supabase = supabaseUrl && supabaseServiceKey
   ? createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
+      auth: { autoRefreshToken: false, persistSession: false }
     })
   : null;
 
-// Helper function to check if Supabase is configured
+const supabaseAdmin = supabase;
+
 function isSupabaseConfigured() {
-  return !!supabase;
+  return !!(supabaseUrl && supabaseServiceKey);
 }
 
-// Helper function to get the appropriate client
-function getSupabaseClient(useAdmin = false) {
-  if (useAdmin && supabaseAdmin) {
-    return supabaseAdmin;
-  }
+function getSupabaseClient() {
   return supabase;
 }
 
 // Database operation helpers for consistent error handling
 async function query(table, options = {}) {
-  const client = getSupabaseClient(options.useAdmin);
+  const client = getSupabaseClient();
   if (!client) {
     throw new Error('Supabase is not configured');
   }
@@ -117,7 +95,7 @@ async function query(table, options = {}) {
 }
 
 async function insert(table, data, options = {}) {
-  const client = getSupabaseClient(options.useAdmin);
+  const client = getSupabaseClient();
   if (!client) {
     throw new Error('Supabase is not configured');
   }
@@ -142,7 +120,7 @@ async function insert(table, data, options = {}) {
 }
 
 async function update(table, data, match, options = {}) {
-  const client = getSupabaseClient(options.useAdmin);
+  const client = getSupabaseClient();
   if (!client) {
     throw new Error('Supabase is not configured');
   }
@@ -171,7 +149,7 @@ async function update(table, data, match, options = {}) {
 }
 
 async function remove(table, match, options = {}) {
-  const client = getSupabaseClient(options.useAdmin);
+  const client = getSupabaseClient();
   if (!client) {
     throw new Error('Supabase is not configured');
   }
@@ -192,7 +170,7 @@ async function remove(table, match, options = {}) {
 }
 
 async function upsert(table, data, options = {}) {
-  const client = getSupabaseClient(options.useAdmin);
+  const client = getSupabaseClient();
   if (!client) {
     throw new Error('Supabase is not configured');
   }
@@ -216,7 +194,7 @@ async function upsert(table, data, options = {}) {
 
 // RPC (stored procedure) call helper
 async function rpc(functionName, params = {}, options = {}) {
-  const client = getSupabaseClient(options.useAdmin);
+  const client = getSupabaseClient();
   if (!client) {
     throw new Error('Supabase is not configured');
   }

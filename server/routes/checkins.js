@@ -1,17 +1,14 @@
 const express = require('express');
-const { createClient } = require('@supabase/supabase-js');
+const { getSupabaseClient } = require('../config/supabase');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
 // Get all check-ins (admin) or my check-ins (employee)
 router.get('/', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     let checkins;
 
     if (req.user.role === 'admin') {
@@ -63,6 +60,8 @@ router.get('/', authenticateToken, async (req, res) => {
 // Get my check-ins
 router.get('/my-checkins', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { data: checkins, error } = await supabase
       .from('check_ins')
       .select('*')
@@ -94,6 +93,8 @@ router.get('/my-checkins', authenticateToken, async (req, res) => {
 // Check in
 router.post('/check-in', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { location, notes } = req.body;
 
     const today = new Date().toISOString().split('T')[0];
@@ -158,6 +159,8 @@ router.post('/check-in', authenticateToken, async (req, res) => {
 // Check out
 router.post('/check-out', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const today = new Date().toISOString().split('T')[0];
     const now = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
@@ -201,6 +204,8 @@ router.post('/check-out', authenticateToken, async (req, res) => {
 // Get today's check-in status
 router.get('/today', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const today = new Date().toISOString().split('T')[0];
 
     const { data: checkin } = await supabase

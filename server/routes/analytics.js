@@ -1,13 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const { createClient } = require('@supabase/supabase-js');
+const { getSupabaseClient } = require('../config/supabase');
 const { authenticateToken, isAdmin } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+router.use((req, res, next) => {
+  const supabase = getSupabaseClient();
+  if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+  req.supabase = supabase;
+  next();
+});
 
 // ==========================================
 // HR ANALYTICS DASHBOARD
@@ -16,16 +18,16 @@ const supabase = createClient(
 // Get comprehensive HR analytics
 router.get('/hr-overview', authenticateToken, isAdmin, async (req, res) => {
   try {
-    const { count: totalEmployees } = await supabase.from('users').select('*', { count: 'exact', head: true });
-    const { count: inProbation } = await supabase.from('team_members').select('*', { count: 'exact', head: true }).eq('in_probation', 1);
-    const { count: pendingLeaves } = await supabase.from('leave_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending');
-    const { count: openTasks } = await supabase.from('tasks').select('*', { count: 'exact', head: true }).neq('status', 'completed');
-    const { count: activeKPIs } = await supabase.from('kpis').select('*', { count: 'exact', head: true }).neq('status', 'achieved');
-    const { count: activePIPs } = await supabase.from('pips').select('*', { count: 'exact', head: true }).eq('status', 'active');
-    const { count: activeAppraisals } = await supabase.from('appraisal_cycles').select('*', { count: 'exact', head: true }).eq('status', 'active');
+    const { count: totalEmployees } = await req.supabase.from('users').select('*', { count: 'exact', head: true });
+    const { count: inProbation } = await req.supabase.from('team_members').select('*', { count: 'exact', head: true }).eq('in_probation', 1);
+    const { count: pendingLeaves } = await req.supabase.from('leave_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+    const { count: openTasks } = await req.supabase.from('tasks').select('*', { count: 'exact', head: true }).neq('status', 'completed');
+    const { count: activeKPIs } = await req.supabase.from('kpis').select('*', { count: 'exact', head: true }).neq('status', 'achieved');
+    const { count: activePIPs } = await req.supabase.from('pips').select('*', { count: 'exact', head: true }).eq('status', 'active');
+    const { count: activeAppraisals } = await req.supabase.from('appraisal_cycles').select('*', { count: 'exact', head: true }).eq('status', 'active');
 
-    const { data: byDepartment } = await supabase.rpc('count_by_department').catch(() => ({ data: [] }));
-    const { data: byRole } = await supabase.rpc('count_by_role').catch(() => ({ data: [] }));
+    const { data: byDepartment } = await req.supabase.rpc('count_by_department').catch(() => ({ data: [] }));
+    const { data: byRole } = await req.supabase.rpc('count_by_role').catch(() => ({ data: [] }));
 
     res.json({
       totalEmployees: totalEmployees || 0,
@@ -62,7 +64,7 @@ router.get('/headcount-trends', authenticateToken, isAdmin, async (req, res) => 
 // Get attendance analytics
 router.get('/attendance-analytics', authenticateToken, isAdmin, async (req, res) => {
   try {
-    const { count: totalCheckIns } = await supabase.from('check_ins').select('*', { count: 'exact', head: true });
+    const { count: totalCheckIns } = await req.supabase.from('check_ins').select('*', { count: 'exact', head: true });
 
     res.json({
       totalCheckIns: totalCheckIns || 0,
@@ -80,10 +82,10 @@ router.get('/attendance-analytics', authenticateToken, isAdmin, async (req, res)
 // Get leave analytics
 router.get('/leave-analytics', authenticateToken, isAdmin, async (req, res) => {
   try {
-    const { count: totalRequests } = await supabase.from('leave_requests').select('*', { count: 'exact', head: true });
-    const { count: pendingRequests } = await supabase.from('leave_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending');
-    const { count: approvedRequests } = await supabase.from('leave_requests').select('*', { count: 'exact', head: true }).eq('status', 'approved');
-    const { count: rejectedRequests } = await supabase.from('leave_requests').select('*', { count: 'exact', head: true }).eq('status', 'rejected');
+    const { count: totalRequests } = await req.supabase.from('leave_requests').select('*', { count: 'exact', head: true });
+    const { count: pendingRequests } = await req.supabase.from('leave_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+    const { count: approvedRequests } = await req.supabase.from('leave_requests').select('*', { count: 'exact', head: true }).eq('status', 'approved');
+    const { count: rejectedRequests } = await req.supabase.from('leave_requests').select('*', { count: 'exact', head: true }).eq('status', 'rejected');
 
     res.json({
       totalRequests: totalRequests || 0,
@@ -103,11 +105,11 @@ router.get('/leave-analytics', authenticateToken, isAdmin, async (req, res) => {
 // Get performance analytics
 router.get('/performance-analytics', authenticateToken, isAdmin, async (req, res) => {
   try {
-    const { data: kpis } = await supabase.from('kpis').select('status');
-    const { data: pips } = await supabase.from('pips').select('status');
-    const { count: totalRecognitions } = await supabase.from('recognitions').select('*', { count: 'exact', head: true });
-    const { count: activeCycles } = await supabase.from('appraisal_cycles').select('*', { count: 'exact', head: true }).eq('status', 'active');
-    const { count: pendingReviews } = await supabase.from('appraisals').select('*', { count: 'exact', head: true }).in('status', ['pending', 'self_review']);
+    const { data: kpis } = await req.supabase.from('kpis').select('status');
+    const { data: pips } = await req.supabase.from('pips').select('status');
+    const { count: totalRecognitions } = await req.supabase.from('recognitions').select('*', { count: 'exact', head: true });
+    const { count: activeCycles } = await req.supabase.from('appraisal_cycles').select('*', { count: 'exact', head: true }).eq('status', 'active');
+    const { count: pendingReviews } = await req.supabase.from('appraisals').select('*', { count: 'exact', head: true }).in('status', ['pending', 'self_review']);
 
     res.json({
       kpiStats: {
@@ -143,8 +145,8 @@ router.get('/performance-analytics', authenticateToken, isAdmin, async (req, res
 // Get recruitment analytics
 router.get('/recruitment-analytics', authenticateToken, isAdmin, async (req, res) => {
   try {
-    const { count: openPositions } = await supabase.from('job_postings').select('*', { count: 'exact', head: true }).eq('status', 'published');
-    const { count: totalCandidates } = await supabase.from('candidates').select('*', { count: 'exact', head: true });
+    const { count: openPositions } = await req.supabase.from('job_postings').select('*', { count: 'exact', head: true }).eq('status', 'published');
+    const { count: totalCandidates } = await req.supabase.from('candidates').select('*', { count: 'exact', head: true });
 
     res.json({
       openPositions: openPositions || 0,
@@ -184,7 +186,7 @@ router.get('/payroll-analytics', authenticateToken, isAdmin, async (req, res) =>
 // Get asset analytics
 router.get('/asset-analytics', authenticateToken, isAdmin, async (req, res) => {
   try {
-    const { count: totalAssets } = await supabase.from('assets').select('*', { count: 'exact', head: true });
+    const { count: totalAssets } = await req.supabase.from('assets').select('*', { count: 'exact', head: true });
 
     res.json({
       totalAssets: totalAssets || 0,
@@ -204,8 +206,8 @@ router.get('/asset-analytics', authenticateToken, isAdmin, async (req, res) => {
 // Get learning analytics
 router.get('/learning-analytics', authenticateToken, isAdmin, async (req, res) => {
   try {
-    const { count: totalCourses } = await supabase.from('courses').select('*', { count: 'exact', head: true }).eq('is_active', true);
-    const { count: totalEnrollments } = await supabase.from('course_enrollments').select('*', { count: 'exact', head: true });
+    const { count: totalCourses } = await req.supabase.from('courses').select('*', { count: 'exact', head: true }).eq('is_active', true);
+    const { count: totalEnrollments } = await req.supabase.from('course_enrollments').select('*', { count: 'exact', head: true });
 
     res.json({
       totalCourses: totalCourses || 0,
@@ -352,8 +354,8 @@ router.delete('/reports/:id', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    await supabase.from('scheduled_reports').delete().eq('report_id', req.params.id);
-    await supabase.from('saved_reports').delete().eq('id', req.params.id);
+    await req.supabase.from('scheduled_reports').delete().eq('report_id', req.params.id);
+    await req.supabase.from('saved_reports').delete().eq('id', req.params.id);
 
     res.json({ message: 'Report deleted' });
   } catch (error) {
@@ -452,13 +454,13 @@ router.put('/preferences', authenticateToken, async (req, res) => {
     if (sidebar_collapsed !== undefined) updateData.sidebar_collapsed = sidebar_collapsed;
 
     if (existing) {
-      await supabase.from('user_preferences').update(updateData).eq('user_id', req.user.id);
+      await req.supabase.from('user_preferences').update(updateData).eq('user_id', req.user.id);
     } else {
       const id = `pref-${uuidv4()}`;
-      await supabase.from('user_preferences').insert({ id, user_id: req.user.id, ...updateData });
+      await req.supabase.from('user_preferences').insert({ id, user_id: req.user.id, ...updateData });
     }
 
-    const { data: prefs } = await supabase.from('user_preferences').select().eq('user_id', req.user.id).single();
+    const { data: prefs } = await req.supabase.from('user_preferences').select().eq('user_id', req.user.id).single();
     res.json(prefs);
   } catch (error) {
     console.error('Error updating preferences:', error);
@@ -494,10 +496,10 @@ router.post('/widgets', authenticateToken, async (req, res) => {
   try {
     const { widgets } = req.body;
 
-    await supabase.from('dashboard_widgets').delete().eq('user_id', req.user.id);
+    await req.supabase.from('dashboard_widgets').delete().eq('user_id', req.user.id);
 
     for (const widget of widgets) {
-      await supabase.from('dashboard_widgets').insert({
+      await req.supabase.from('dashboard_widgets').insert({
         id: `widget-${uuidv4()}`,
         user_id: req.user.id,
         widget_type: widget.widget_type,

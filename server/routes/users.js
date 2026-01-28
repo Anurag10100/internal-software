@@ -1,18 +1,15 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { createClient } = require('@supabase/supabase-js');
+const { getSupabaseClient } = require('../config/supabase');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
 // Get all users
 router.get('/', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { data: users, error } = await supabase
       .from('users')
       .select('id, name, email, department, designation, role, avatar, created_at')
@@ -30,6 +27,8 @@ router.get('/', authenticateToken, async (req, res) => {
 // Get team members with additional info
 router.get('/team', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { data: members, error } = await supabase
       .from('users')
       .select('id, name, email, department, designation, role, created_at, team_members!left(profile, in_probation, status)')
@@ -60,6 +59,8 @@ router.get('/team', authenticateToken, async (req, res) => {
 // Add team member (admin only)
 router.post('/team', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { name, email, password, department, designation, profile, role = 'employee' } = req.body;
 
     if (!name || !email || !password || !department) {
@@ -128,6 +129,8 @@ router.post('/team', authenticateToken, requireAdmin, async (req, res) => {
 // Update team member (admin only)
 router.put('/team/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { id } = req.params;
     const { name, email, department, designation, profile, status, inProbation } = req.body;
 
@@ -203,6 +206,8 @@ router.put('/team/:id', authenticateToken, requireAdmin, async (req, res) => {
 // Delete team member (admin only)
 router.delete('/team/:id', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { id } = req.params;
 
     const { data: existingUser, error: findError } = await supabase
@@ -236,6 +241,8 @@ router.delete('/team/:id', authenticateToken, requireAdmin, async (req, res) => 
 // Update user profile (self)
 router.put('/profile', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { name, avatar } = req.body;
 
     const updateData = {};

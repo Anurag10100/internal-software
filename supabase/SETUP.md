@@ -67,9 +67,8 @@ Update the following variables in your `.env` file:
 # Set database mode to supabase
 DATABASE_MODE=supabase
 
-# Your Supabase credentials
+# Main HRMS backend only needs URL + service role key
 SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_ANON_KEY=your-anon-key-here
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
 ```
 

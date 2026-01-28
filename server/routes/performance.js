@@ -2,13 +2,14 @@ const express = require('express');
 const router = express.Router();
 const { authenticateToken } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
-const { createClient } = require('@supabase/supabase-js');
+const { getSupabaseClient } = require('../config/supabase');
 
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+router.use((req, res, next) => {
+  const supabase = getSupabaseClient();
+  if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+  req.supabase = supabase;
+  next();
+});
 
 // ==========================================
 // KPIs
@@ -16,7 +17,7 @@ const supabase = createClient(
 
 router.get('/kpis', authenticateToken, async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('kpis')
       .select('*, users!user_id(name, department, designation)')
       .order('created_at', { ascending: false });
@@ -39,7 +40,7 @@ router.get('/kpis', authenticateToken, async (req, res) => {
 
 router.get('/kpis/my-kpis', authenticateToken, async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('kpis')
       .select('*')
       .eq('user_id', req.user.id)
@@ -54,7 +55,7 @@ router.get('/kpis/my-kpis', authenticateToken, async (req, res) => {
 
 router.get('/kpis/user/:userId', authenticateToken, async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('kpis')
       .select('*')
       .eq('user_id', req.params.userId)
@@ -72,7 +73,7 @@ router.post('/kpis', authenticateToken, async (req, res) => {
     const { user_id, title, description, metric_type, target_value, unit, period } = req.body;
     const id = `kpi-${uuidv4()}`;
 
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('kpis')
       .insert({ id, user_id, title, description, metric_type, target_value, unit, period })
       .select()
@@ -99,7 +100,7 @@ router.put('/kpis/:id', authenticateToken, async (req, res) => {
     if (period !== undefined) updateData.period = period;
     if (status !== undefined) updateData.status = status;
 
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('kpis')
       .update(updateData)
       .eq('id', req.params.id)
@@ -115,7 +116,7 @@ router.put('/kpis/:id', authenticateToken, async (req, res) => {
 
 router.delete('/kpis/:id', authenticateToken, async (req, res) => {
   try {
-    const { error } = await supabase.from('kpis').delete().eq('id', req.params.id);
+    const { error } = await req.supabase.from('kpis').delete().eq('id', req.params.id);
     if (error) throw error;
     res.json({ message: 'KPI deleted' });
   } catch (error) {
@@ -129,7 +130,7 @@ router.delete('/kpis/:id', authenticateToken, async (req, res) => {
 
 router.get('/notes', authenticateToken, async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('performance_notes')
       .select('*, user:users!user_id(name, department), author:users!author_id(name)')
       .order('created_at', { ascending: false });
@@ -180,7 +181,7 @@ router.get('/notes/for/:userId', authenticateToken, async (req, res) => {
 
 router.get('/notes/my-notes', authenticateToken, async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('performance_notes')
       .select('*, author:users!author_id(name)')
       .eq('user_id', req.user.id)
@@ -206,7 +207,7 @@ router.post('/notes', authenticateToken, async (req, res) => {
     const { user_id, type, content, is_private } = req.body;
     const id = `note-${uuidv4()}`;
 
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('performance_notes')
       .insert({
         id,
@@ -233,7 +234,7 @@ router.post('/notes', authenticateToken, async (req, res) => {
 
 router.delete('/notes/:id', authenticateToken, async (req, res) => {
   try {
-    const { error } = await supabase
+    const { error } = await req.supabase
       .from('performance_notes')
       .delete()
       .eq('id', req.params.id)
@@ -252,7 +253,7 @@ router.delete('/notes/:id', authenticateToken, async (req, res) => {
 
 router.get('/pips', authenticateToken, async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('pips')
       .select('*, user:users!user_id(name, department, designation), manager:users!manager_id(name)')
       .order('created_at', { ascending: false });
@@ -277,7 +278,7 @@ router.get('/pips', authenticateToken, async (req, res) => {
 
 router.get('/pips/active', authenticateToken, async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('pips')
       .select('*, user:users!user_id(name, department, designation), manager:users!manager_id(name)')
       .eq('status', 'active')
@@ -303,7 +304,7 @@ router.get('/pips/active', authenticateToken, async (req, res) => {
 
 router.get('/pips/my-pip', authenticateToken, async (req, res) => {
   try {
-    const { data: pip, error } = await supabase
+    const { data: pip, error } = await req.supabase
       .from('pips')
       .select('*, manager:users!manager_id(name)')
       .eq('user_id', req.user.id)
@@ -315,7 +316,7 @@ router.get('/pips/my-pip', authenticateToken, async (req, res) => {
     if (error) throw error;
 
     if (pip) {
-      const { data: checkpoints } = await supabase
+      const { data: checkpoints } = await req.supabase
         .from('pip_checkpoints')
         .select('*, reviewer:users!reviewed_by(name)')
         .eq('pip_id', pip.id)
@@ -338,7 +339,7 @@ router.get('/pips/my-pip', authenticateToken, async (req, res) => {
 
 router.get('/pips/:id', authenticateToken, async (req, res) => {
   try {
-    const { data: pip, error } = await supabase
+    const { data: pip, error } = await req.supabase
       .from('pips')
       .select('*, user:users!user_id(name, email, department, designation), manager:users!manager_id(name)')
       .eq('id', req.params.id)
@@ -347,7 +348,7 @@ router.get('/pips/:id', authenticateToken, async (req, res) => {
     if (error) throw error;
     if (!pip) return res.status(404).json({ error: 'PIP not found' });
 
-    const { data: checkpoints } = await supabase
+    const { data: checkpoints } = await req.supabase
       .from('pip_checkpoints')
       .select('*, reviewer:users!reviewed_by(name)')
       .eq('pip_id', pip.id)
@@ -378,7 +379,7 @@ router.post('/pips', authenticateToken, async (req, res) => {
     const { user_id, start_date, end_date, reason, goals } = req.body;
     const id = `pip-${uuidv4()}`;
 
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('pips')
       .insert({
         id,
@@ -410,7 +411,7 @@ router.put('/pips/:id', authenticateToken, async (req, res) => {
     if (status !== undefined) updateData.status = status;
     if (outcome !== undefined) updateData.outcome = outcome;
 
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('pips')
       .update(updateData)
       .eq('id', req.params.id)
@@ -429,7 +430,7 @@ router.post('/pips/:id/checkpoints', authenticateToken, async (req, res) => {
     const { checkpoint_date, progress_notes, rating } = req.body;
     const id = `pipc-${uuidv4()}`;
 
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('pip_checkpoints')
       .insert({
         id,
@@ -456,7 +457,7 @@ router.post('/pips/:id/checkpoints', authenticateToken, async (req, res) => {
 
 router.get('/pips/:id/checkpoints', authenticateToken, async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('pip_checkpoints')
       .select('*, reviewer:users!reviewed_by(name)')
       .eq('pip_id', req.params.id)
@@ -482,7 +483,7 @@ router.get('/pips/:id/checkpoints', authenticateToken, async (req, res) => {
 
 router.get('/recognitions', authenticateToken, async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('recognitions')
       .select('*, recipient:users!recipient_id(name, department), nominator:users!nominator_id(name)')
       .eq('is_public', 1)
@@ -507,7 +508,7 @@ router.get('/recognitions', authenticateToken, async (req, res) => {
 
 router.get('/recognitions/my-recognitions', authenticateToken, async (req, res) => {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('recognitions')
       .select('*, nominator:users!nominator_id(name)')
       .eq('recipient_id', req.user.id)
@@ -532,7 +533,7 @@ router.post('/recognitions', authenticateToken, async (req, res) => {
     const { recipient_id, type, badge, title, message, is_public } = req.body;
     const id = `rec-${uuidv4()}`;
 
-    const { data, error } = await supabase
+    const { data, error } = await req.supabase
       .from('recognitions')
       .insert({
         id,
@@ -564,7 +565,7 @@ router.post('/recognitions', authenticateToken, async (req, res) => {
 
 router.delete('/recognitions/:id', authenticateToken, async (req, res) => {
   try {
-    const { error } = await supabase
+    const { error } = await req.supabase
       .from('recognitions')
       .delete()
       .eq('id', req.params.id)
@@ -586,7 +587,7 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
     const stats = {};
 
     // KPI stats
-    const { data: kpis } = await supabase.from('kpis').select('status');
+    const { data: kpis } = await req.supabase.from('kpis').select('status');
     stats.kpis = {
       total: kpis?.length || 0,
       achieved: kpis?.filter(k => k.status === 'achieved').length || 0,
@@ -596,7 +597,7 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
     };
 
     // Active PIPs
-    const { count: activePips } = await supabase
+    const { count: activePips } = await req.supabase
       .from('pips')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'active');
@@ -605,14 +606,14 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
     // Recent recognitions
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const { count: recentRecs } = await supabase
+    const { count: recentRecs } = await req.supabase
       .from('recognitions')
       .select('*', { count: 'exact', head: true })
       .gte('created_at', thirtyDaysAgo.toISOString());
     stats.recentRecognitions = recentRecs || 0;
 
     // Goals stats
-    const { data: goals } = await supabase
+    const { data: goals } = await req.supabase
       .from('goals')
       .select('status, progress')
       .eq('status', 'active');

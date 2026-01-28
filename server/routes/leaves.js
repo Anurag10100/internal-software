@@ -1,17 +1,14 @@
 const express = require('express');
-const { createClient } = require('@supabase/supabase-js');
+const { getSupabaseClient } = require('../config/supabase');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
 // Get all leave requests (admin) or my requests (employee)
 router.get('/', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     let leaves;
 
     if (req.user.role === 'admin') {
@@ -61,6 +58,8 @@ router.get('/', authenticateToken, async (req, res) => {
 // Get my leave requests
 router.get('/my-leaves', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { data: leaves, error } = await supabase
       .from('leave_requests')
       .select('*')
@@ -91,6 +90,8 @@ router.get('/my-leaves', authenticateToken, async (req, res) => {
 // Create leave request
 router.post('/', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { leaveType, startDate, endDate, reason } = req.body;
 
     if (!leaveType || !startDate || !endDate) {
@@ -137,6 +138,8 @@ router.post('/', authenticateToken, async (req, res) => {
 // Update leave request status (admin only)
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { id } = req.params;
     const { status, reason } = req.body;
 
@@ -193,6 +196,8 @@ router.put('/:id', authenticateToken, async (req, res) => {
 // Delete leave request
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { id } = req.params;
 
     const { data: existingLeave, error: findError } = await supabase

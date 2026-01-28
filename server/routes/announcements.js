@@ -1,124 +1,128 @@
 const express = require('express');
 const router = express.Router();
-const { db } = require('../config/database');
+const { getSupabaseClient } = require('../config/supabase');
 const { authenticateToken, isAdmin } = require('../middleware/auth');
 const { v4: uuidv4 } = require('uuid');
+
+router.use((req, res, next) => {
+  const supabase = getSupabaseClient();
+  if (!supabase) return res.status(503).json({ error: 'Database not configured' });
+  req.supabase = supabase;
+  next();
+});
 
 // ==========================================
 // ANNOUNCEMENTS
 // ==========================================
 
-// Get all announcements (filtered by audience)
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const { type, priority } = req.query;
-    const userDept = req.user.department;
-
-    let query = `
-      SELECT a.*, u.name as author_name, u.avatar as author_avatar,
-             (SELECT COUNT(*) FROM announcement_reads WHERE announcement_id = a.id) as reads_count,
-             (SELECT id FROM announcement_reads WHERE announcement_id = a.id AND user_id = ?) as my_read_id
-      FROM announcements a
-      JOIN users u ON a.author_id = u.id
-      WHERE a.status = 'published'
-        AND (a.publish_at IS NULL OR a.publish_at <= datetime('now'))
-        AND (a.expires_at IS NULL OR a.expires_at > datetime('now'))
-        AND (
-          a.target_audience = 'all'
-          OR a.target_departments LIKE ?
-        )
-    `;
-    const params = [req.user.id, `%${userDept}%`];
-
-    if (type) {
-      query += ' AND a.type = ?';
-      params.push(type);
-    }
-    if (priority) {
-      query += ' AND a.priority = ?';
-      params.push(priority);
-    }
-
-    query += ' ORDER BY a.is_pinned DESC, a.publish_at DESC, a.created_at DESC';
-
-    const announcements = await db.prepare(query).all(...params);
-    res.json(announcements);
+    const userDept = req.user.department || '';
+    const now = new Date().toISOString();
+    let q = req.supabase
+      .from('announcements')
+      .select('*, author:users!author_id(name, avatar)')
+      .eq('status', 'published')
+      .or(`publish_at.is.null,publish_at.lte.${now}`)
+      .or(`expires_at.is.null,expires_at.gt.${now}`)
+      .order('is_pinned', { ascending: false })
+      .order('publish_at', { ascending: false })
+      .order('created_at', { ascending: false });
+    if (type) q = q.eq('type', type);
+    if (priority) q = q.eq('priority', priority);
+    const { data: announcements, error } = await q;
+    if (error) throw error;
+    let list = announcements || [];
+    list = list.filter((a) => a.target_audience === 'all' || (a.target_departments && a.target_departments.includes(userDept)));
+    const ids = list.map((a) => a.id);
+    const [readsRes, myReadsRes] = await Promise.all([
+      ids.length ? req.supabase.from('announcement_reads').select('announcement_id').in('announcement_id', ids) : { data: [] },
+      ids.length ? req.supabase.from('announcement_reads').select('announcement_id, id').eq('user_id', req.user.id).in('announcement_id', ids) : { data: [] },
+    ]);
+    const countByAnn = (readsRes.data || []).reduce((acc, r) => { acc[r.announcement_id] = (acc[r.announcement_id] || 0) + 1; return acc; }, {});
+    const myReadByAnn = new Map((myReadsRes.data || []).map((r) => [r.announcement_id, r.id]));
+    const formatted = list.map((a) => ({
+      ...a,
+      author_name: a.author?.name,
+      author_avatar: a.author?.avatar,
+      reads_count: countByAnn[a.id] || 0,
+      my_read_id: myReadByAnn.get(a.id) ?? null,
+      author: undefined,
+    }));
+    res.json(formatted);
   } catch (error) {
     console.error('Error fetching announcements:', error);
     res.status(500).json({ error: 'Failed to fetch announcements' });
   }
 });
 
-// Get all announcements (admin)
 router.get('/admin/all', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { status } = req.query;
-    let query = `
-      SELECT a.*, u.name as author_name,
-             (SELECT COUNT(*) FROM announcement_reads WHERE announcement_id = a.id) as reads_count
-      FROM announcements a
-      JOIN users u ON a.author_id = u.id
-      WHERE 1=1
-    `;
-    const params = [];
-
-    if (status) {
-      query += ' AND a.status = ?';
-      params.push(status);
-    }
-
-    query += ' ORDER BY a.created_at DESC';
-
-    const announcements = await db.prepare(query).all(...params);
-    res.json(announcements);
+    let q = req.supabase
+      .from('announcements')
+      .select('*, author:users!author_id(name)')
+      .order('created_at', { ascending: false });
+    if (status) q = q.eq('status', status);
+    const { data: announcements, error } = await q;
+    if (error) throw error;
+    const list = announcements || [];
+    const ids = list.map((a) => a.id);
+    const { data: reads } = ids.length ? await req.supabase.from('announcement_reads').select('announcement_id').in('announcement_id', ids) : { data: [] };
+    const countByAnn = (reads || []).reduce((acc, r) => { acc[r.announcement_id] = (acc[r.announcement_id] || 0) + 1; return acc; }, {});
+    const formatted = list.map((a) => ({
+      ...a,
+      author_name: a.author?.name,
+      reads_count: countByAnn[a.id] || 0,
+      author: undefined,
+    }));
+    res.json(formatted);
   } catch (error) {
     console.error('Error fetching announcements:', error);
     res.status(500).json({ error: 'Failed to fetch announcements' });
   }
 });
 
-// Get single announcement
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
-    const announcement = await db.prepare(`
-      SELECT a.*, u.name as author_name, u.avatar as author_avatar
-      FROM announcements a
-      JOIN users u ON a.author_id = u.id
-      WHERE a.id = ?
-    `).get(req.params.id);
-
-    if (!announcement) {
-      return res.status(404).json({ error: 'Announcement not found' });
+    const { data: announcement, error } = await req.supabase
+      .from('announcements')
+      .select('*, author:users!author_id(name, avatar)')
+      .eq('id', req.params.id)
+      .single();
+    if (error || !announcement) {
+      if (error?.code === 'PGRST116') return res.status(404).json({ error: 'Announcement not found' });
+      throw error || new Error('Not found');
     }
-
-    // Mark as read
-    const existing = await db.prepare('SELECT id FROM announcement_reads WHERE announcement_id = ? AND user_id = ?').get(req.params.id, req.user.id);
+    const { data: existing } = await req.supabase.from('announcement_reads').select('id').eq('announcement_id', req.params.id).eq('user_id', req.user.id).maybeSingle();
     if (!existing) {
-      await db.prepare(`
-        INSERT INTO announcement_reads (id, announcement_id, user_id)
-        VALUES (?, ?, ?)
-      `).run(`ar-${uuidv4()}`, req.params.id, req.user.id);
+      await req.supabase.from('announcement_reads').insert({
+        id: `ar-${uuidv4()}`, announcement_id: req.params.id, user_id: req.user.id,
+      });
     }
-
-    res.json(announcement);
+    res.json({
+      ...announcement,
+      author_name: announcement.author?.name,
+      author_avatar: announcement.author?.avatar,
+      author: undefined,
+    });
   } catch (error) {
     console.error('Error fetching announcement:', error);
     res.status(500).json({ error: 'Failed to fetch announcement' });
   }
 });
 
-// Create announcement
 router.post('/', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { title, content, type, priority, target_audience, target_departments, target_locations, publish_at, expires_at, is_pinned, requires_acknowledgment, attachment_url, status } = req.body;
-
     const id = `ann-${uuidv4()}`;
-    await db.prepare(`
-      INSERT INTO announcements (id, title, content, type, priority, target_audience, target_departments, target_locations, author_id, publish_at, expires_at, is_pinned, requires_acknowledgment, attachment_url, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, title, content, type || 'general', priority || 'normal', target_audience || 'all', target_departments, target_locations, req.user.id, publish_at, expires_at, is_pinned ? 1 : 0, requires_acknowledgment ? 1 : 0, attachment_url, status || 'draft');
-
-    const announcement = await db.prepare('SELECT * FROM announcements WHERE id = ?').get(id);
+    const { error } = await req.supabase.from('announcements').insert({
+      id, title, content, type: type || 'general', priority: priority || 'normal', target_audience: target_audience || 'all', target_departments, target_locations, author_id: req.user.id, publish_at, expires_at, is_pinned: is_pinned ? 1 : 0, requires_acknowledgment: requires_acknowledgment ? 1 : 0, attachment_url, status: status || 'draft',
+    });
+    if (error) throw error;
+    const { data: announcement, error: e2 } = await req.supabase.from('announcements').select('*').eq('id', id).single();
+    if (e2) throw e2;
     res.status(201).json(announcement);
   } catch (error) {
     console.error('Error creating announcement:', error);
@@ -126,20 +130,15 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
   }
 });
 
-// Update announcement
 router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { title, content, type, priority, target_audience, target_departments, target_locations, publish_at, expires_at, is_pinned, requires_acknowledgment, attachment_url, status } = req.body;
-
-    await db.prepare(`
-      UPDATE announcements SET title = ?, content = ?, type = ?, priority = ?,
-      target_audience = ?, target_departments = ?, target_locations = ?,
-      publish_at = ?, expires_at = ?, is_pinned = ?, requires_acknowledgment = ?,
-      attachment_url = ?, status = ?
-      WHERE id = ?
-    `).run(title, content, type, priority, target_audience, target_departments, target_locations, publish_at, expires_at, is_pinned ? 1 : 0, requires_acknowledgment ? 1 : 0, attachment_url, status, req.params.id);
-
-    const announcement = await db.prepare('SELECT * FROM announcements WHERE id = ?').get(req.params.id);
+    const { error } = await req.supabase.from('announcements').update({
+      title, content, type, priority, target_audience, target_departments, target_locations, publish_at, expires_at, is_pinned: is_pinned ? 1 : 0, requires_acknowledgment: requires_acknowledgment ? 1 : 0, attachment_url, status,
+    }).eq('id', req.params.id);
+    if (error) throw error;
+    const { data: announcement, error: e2 } = await req.supabase.from('announcements').select('*').eq('id', req.params.id).single();
+    if (e2) throw e2;
     res.json(announcement);
   } catch (error) {
     console.error('Error updating announcement:', error);
@@ -147,11 +146,10 @@ router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
   }
 });
 
-// Delete announcement
 router.delete('/:id', authenticateToken, isAdmin, async (req, res) => {
   try {
-    await db.prepare('DELETE FROM announcement_reads WHERE announcement_id = ?').run(req.params.id);
-    await db.prepare('DELETE FROM announcements WHERE id = ?').run(req.params.id);
+    await req.supabase.from('announcement_reads').delete().eq('announcement_id', req.params.id);
+    await req.supabase.from('announcements').delete().eq('id', req.params.id);
     res.json({ message: 'Announcement deleted' });
   } catch (error) {
     console.error('Error deleting announcement:', error);
@@ -159,13 +157,10 @@ router.delete('/:id', authenticateToken, isAdmin, async (req, res) => {
   }
 });
 
-// Acknowledge announcement
 router.post('/:id/acknowledge', authenticateToken, async (req, res) => {
   try {
-    await db.prepare(`
-      UPDATE announcement_reads SET acknowledged_at = CURRENT_TIMESTAMP
-      WHERE announcement_id = ? AND user_id = ?
-    `).run(req.params.id, req.user.id);
+    const { error } = await req.supabase.from('announcement_reads').update({ acknowledged_at: new Date().toISOString() }).eq('announcement_id', req.params.id).eq('user_id', req.user.id);
+    if (error) throw error;
     res.json({ message: 'Acknowledged' });
   } catch (error) {
     console.error('Error acknowledging:', error);
@@ -177,111 +172,123 @@ router.post('/:id/acknowledge', authenticateToken, async (req, res) => {
 // COMPANY EVENTS
 // ==========================================
 
-// Get all events
 router.get('/events/all', authenticateToken, async (req, res) => {
   try {
     const { start_date, end_date, event_type } = req.query;
-    const userDept = req.user.department;
-
-    let query = `
-      SELECT e.*, o.name as organizer_name, o.avatar as organizer_avatar,
-             (SELECT COUNT(*) FROM event_registrations WHERE event_id = e.id AND status = 'registered') as registrations_count,
-             (SELECT id FROM event_registrations WHERE event_id = e.id AND user_id = ?) as my_registration
-      FROM company_events e
-      JOIN users o ON e.organizer_id = o.id
-      WHERE e.status != 'cancelled'
-        AND (
-          e.target_audience = 'all'
-          OR e.target_departments LIKE ?
-        )
-    `;
-    const params = [req.user.id, `%${userDept}%`];
-
-    if (start_date) {
-      query += ' AND e.start_date >= ?';
-      params.push(start_date);
-    }
-    if (end_date) {
-      query += ' AND e.end_date <= ?';
-      params.push(end_date);
-    }
-    if (event_type) {
-      query += ' AND e.event_type = ?';
-      params.push(event_type);
-    }
-
-    query += ' ORDER BY e.start_date, e.start_time';
-
-    const events = await db.prepare(query).all(...params);
-    res.json(events);
+    const userDept = req.user.department || '';
+    let q = req.supabase
+      .from('company_events')
+      .select('*, organizer:users!organizer_id(name, avatar)')
+      .neq('status', 'cancelled')
+      .order('start_date')
+      .order('start_time');
+    if (start_date) q = q.gte('start_date', start_date);
+    if (end_date) q = q.lte('end_date', end_date);
+    if (event_type) q = q.eq('event_type', event_type);
+    const { data: events, error } = await q;
+    if (error) throw error;
+    let list = (events || []).filter((e) => e.target_audience === 'all' || (e.target_departments && e.target_departments.includes(userDept)));
+    const eventIds = list.map((e) => e.id);
+    const [regCounts, myRegs] = await Promise.all([
+      eventIds.length ? req.supabase.from('event_registrations').select('event_id').eq('status', 'registered').in('event_id', eventIds) : { data: [] },
+      eventIds.length ? req.supabase.from('event_registrations').select('event_id, id').eq('user_id', req.user.id).in('event_id', eventIds) : { data: [] },
+    ]);
+    const countByEvent = (regCounts.data || []).reduce((acc, r) => { acc[r.event_id] = (acc[r.event_id] || 0) + 1; return acc; }, {});
+    const myRegByEvent = new Map((myRegs.data || []).map((r) => [r.event_id, r.id]));
+    const formatted = list.map((e) => ({
+      ...e,
+      organizer_name: e.organizer?.name,
+      organizer_avatar: e.organizer?.avatar,
+      registrations_count: countByEvent[e.id] || 0,
+      my_registration: myRegByEvent.get(e.id) ?? null,
+      organizer: undefined,
+    }));
+    res.json(formatted);
   } catch (error) {
     console.error('Error fetching events:', error);
     res.status(500).json({ error: 'Failed to fetch events' });
   }
 });
 
-// Get upcoming events
 router.get('/events/upcoming', authenticateToken, async (req, res) => {
   try {
-    const events = await db.prepare(`
-      SELECT e.*, o.name as organizer_name,
-             (SELECT COUNT(*) FROM event_registrations WHERE event_id = e.id AND status = 'registered') as registrations_count,
-             (SELECT id FROM event_registrations WHERE event_id = e.id AND user_id = ?) as my_registration
-      FROM company_events e
-      JOIN users o ON e.organizer_id = o.id
-      WHERE e.status = 'scheduled' AND e.start_date >= date('now')
-      ORDER BY e.start_date, e.start_time
-      LIMIT 10
-    `).all(req.user.id);
-    res.json(events);
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: events, error } = await req.supabase
+      .from('company_events')
+      .select('*, organizer:users!organizer_id(name)')
+      .eq('status', 'scheduled')
+      .gte('start_date', today)
+      .order('start_date')
+      .order('start_time')
+      .limit(10);
+    if (error) throw error;
+    const list = events || [];
+    const eventIds = list.map((e) => e.id);
+    const [regCounts, myRegs] = await Promise.all([
+      eventIds.length ? req.supabase.from('event_registrations').select('event_id').eq('status', 'registered').in('event_id', eventIds) : { data: [] },
+      eventIds.length ? req.supabase.from('event_registrations').select('event_id, id').eq('user_id', req.user.id).in('event_id', eventIds) : { data: [] },
+    ]);
+    const countByEvent = (regCounts.data || []).reduce((acc, r) => { acc[r.event_id] = (acc[r.event_id] || 0) + 1; return acc; }, {});
+    const myRegByEvent = new Map((myRegs.data || []).map((r) => [r.event_id, r.id]));
+    const formatted = list.map((e) => ({
+      ...e,
+      organizer_name: e.organizer?.name,
+      registrations_count: countByEvent[e.id] || 0,
+      my_registration: myRegByEvent.get(e.id) ?? null,
+      organizer: undefined,
+    }));
+    res.json(formatted);
   } catch (error) {
     console.error('Error fetching events:', error);
     res.status(500).json({ error: 'Failed to fetch events' });
   }
 });
 
-// Get single event
 router.get('/events/:id', authenticateToken, async (req, res) => {
   try {
-    const event = await db.prepare(`
-      SELECT e.*, o.name as organizer_name, o.email as organizer_email
-      FROM company_events e
-      JOIN users o ON e.organizer_id = o.id
-      WHERE e.id = ?
-    `).get(req.params.id);
-
-    if (!event) {
-      return res.status(404).json({ error: 'Event not found' });
+    const { data: event, error } = await req.supabase
+      .from('company_events')
+      .select('*, organizer:users!organizer_id(name, email)')
+      .eq('id', req.params.id)
+      .single();
+    if (error || !event) {
+      if (error?.code === 'PGRST116') return res.status(404).json({ error: 'Event not found' });
+      throw error || new Error('Not found');
     }
-
-    // Get registrations
-    event.registrations = await db.prepare(`
-      SELECT er.*, u.name as user_name, u.department, u.avatar
-      FROM event_registrations er
-      JOIN users u ON er.user_id = u.id
-      WHERE er.event_id = ?
-      ORDER BY er.registered_at
-    `).all(req.params.id);
-
-    res.json(event);
+    const { data: regs } = await req.supabase
+      .from('event_registrations')
+      .select('*, user:users!user_id(name, department, avatar)')
+      .eq('event_id', req.params.id)
+      .order('registered_at');
+    event.registrations = (regs || []).map((r) => ({
+      ...r,
+      user_name: r.user?.name,
+      department: r.user?.department,
+      avatar: r.user?.avatar,
+      user: undefined,
+    }));
+    res.json({
+      ...event,
+      organizer_name: event.organizer?.name,
+      organizer_email: event.organizer?.email,
+      organizer: undefined,
+    });
   } catch (error) {
     console.error('Error fetching event:', error);
     res.status(500).json({ error: 'Failed to fetch event' });
   }
 });
 
-// Create event
 router.post('/events', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { title, description, event_type, start_date, end_date, start_time, end_time, location, virtual_link, is_all_day, is_recurring, recurrence_pattern, target_audience, target_departments, max_participants, registration_required, registration_deadline } = req.body;
-
     const id = `evt-${uuidv4()}`;
-    await db.prepare(`
-      INSERT INTO company_events (id, title, description, event_type, start_date, end_date, start_time, end_time, location, virtual_link, is_all_day, is_recurring, recurrence_pattern, organizer_id, target_audience, target_departments, max_participants, registration_required, registration_deadline)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(id, title, description, event_type || 'meeting', start_date, end_date || start_date, start_time, end_time, location, virtual_link, is_all_day ? 1 : 0, is_recurring ? 1 : 0, recurrence_pattern, req.user.id, target_audience || 'all', target_departments, max_participants, registration_required ? 1 : 0, registration_deadline);
-
-    const event = await db.prepare('SELECT * FROM company_events WHERE id = ?').get(id);
+    const { error } = await req.supabase.from('company_events').insert({
+      id, title, description, event_type: event_type || 'meeting', start_date, end_date: end_date || start_date, start_time, end_time, location, virtual_link, is_all_day: is_all_day ? 1 : 0, is_recurring: is_recurring ? 1 : 0, recurrence_pattern, organizer_id: req.user.id, target_audience: target_audience || 'all', target_departments, max_participants, registration_required: registration_required ? 1 : 0, registration_deadline,
+    });
+    if (error) throw error;
+    const { data: event, error: e2 } = await req.supabase.from('company_events').select('*').eq('id', id).single();
+    if (e2) throw e2;
     res.status(201).json(event);
   } catch (error) {
     console.error('Error creating event:', error);
@@ -289,20 +296,15 @@ router.post('/events', authenticateToken, isAdmin, async (req, res) => {
   }
 });
 
-// Update event
 router.put('/events/:id', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { title, description, event_type, start_date, end_date, start_time, end_time, location, virtual_link, is_all_day, target_audience, target_departments, max_participants, registration_required, registration_deadline, status } = req.body;
-
-    await db.prepare(`
-      UPDATE company_events SET title = ?, description = ?, event_type = ?,
-      start_date = ?, end_date = ?, start_time = ?, end_time = ?, location = ?,
-      virtual_link = ?, is_all_day = ?, target_audience = ?, target_departments = ?,
-      max_participants = ?, registration_required = ?, registration_deadline = ?, status = ?
-      WHERE id = ?
-    `).run(title, description, event_type, start_date, end_date, start_time, end_time, location, virtual_link, is_all_day ? 1 : 0, target_audience, target_departments, max_participants, registration_required ? 1 : 0, registration_deadline, status, req.params.id);
-
-    const event = await db.prepare('SELECT * FROM company_events WHERE id = ?').get(req.params.id);
+    const { error } = await req.supabase.from('company_events').update({
+      title, description, event_type, start_date, end_date, start_time, end_time, location, virtual_link, is_all_day: is_all_day ? 1 : 0, target_audience, target_departments, max_participants, registration_required: registration_required ? 1 : 0, registration_deadline, status,
+    }).eq('id', req.params.id);
+    if (error) throw error;
+    const { data: event, error: e2 } = await req.supabase.from('company_events').select('*').eq('id', req.params.id).single();
+    if (e2) throw e2;
     res.json(event);
   } catch (error) {
     console.error('Error updating event:', error);
@@ -310,36 +312,19 @@ router.put('/events/:id', authenticateToken, isAdmin, async (req, res) => {
   }
 });
 
-// Register for event
 router.post('/events/:id/register', authenticateToken, async (req, res) => {
   try {
-    const event = await db.prepare('SELECT max_participants, registration_deadline FROM company_events WHERE id = ?').get(req.params.id);
-
-    // Check deadline
-    if (event.registration_deadline && new Date(event.registration_deadline) < new Date()) {
-      return res.status(400).json({ error: 'Registration deadline passed' });
-    }
-
-    // Check capacity
+    const { data: event, error: fe } = await req.supabase.from('company_events').select('max_participants, registration_deadline').eq('id', req.params.id).single();
+    if (fe || !event) return res.status(404).json({ error: 'Event not found' });
+    if (event.registration_deadline && new Date(event.registration_deadline) < new Date()) return res.status(400).json({ error: 'Registration deadline passed' });
     if (event.max_participants) {
-      const registered = await db.prepare('SELECT COUNT(*) as count FROM event_registrations WHERE event_id = ? AND status = ?').get(req.params.id, 'registered');
-      if (registered.count >= event.max_participants) {
-        return res.status(400).json({ error: 'Event is full' });
-      }
+      const { count } = await req.supabase.from('event_registrations').select('*', { count: 'exact', head: true }).eq('event_id', req.params.id).eq('status', 'registered');
+      if (count >= event.max_participants) return res.status(400).json({ error: 'Event is full' });
     }
-
-    // Check if already registered
-    const existing = await db.prepare('SELECT id FROM event_registrations WHERE event_id = ? AND user_id = ?').get(req.params.id, req.user.id);
-    if (existing) {
-      return res.status(400).json({ error: 'Already registered' });
-    }
-
+    const { data: existing } = await req.supabase.from('event_registrations').select('id').eq('event_id', req.params.id).eq('user_id', req.user.id).maybeSingle();
+    if (existing) return res.status(400).json({ error: 'Already registered' });
     const id = `er-${uuidv4()}`;
-    await db.prepare(`
-      INSERT INTO event_registrations (id, event_id, user_id)
-      VALUES (?, ?, ?)
-    `).run(id, req.params.id, req.user.id);
-
+    await req.supabase.from('event_registrations').insert({ id, event_id: req.params.id, user_id: req.user.id });
     res.json({ message: 'Registered successfully' });
   } catch (error) {
     console.error('Error registering:', error);
@@ -347,29 +332,31 @@ router.post('/events/:id/register', authenticateToken, async (req, res) => {
   }
 });
 
-// Cancel registration
 router.delete('/events/:id/register', authenticateToken, async (req, res) => {
   try {
-    await db.prepare('DELETE FROM event_registrations WHERE event_id = ? AND user_id = ?').run(req.params.id, req.user.id);
+    await req.supabase.from('event_registrations').delete().eq('event_id', req.params.id).eq('user_id', req.user.id);
     res.json({ message: 'Registration cancelled' });
   } catch (error) {
-    console.error('Error cancelling:', error);
+    console.error('Error cancelling registration:', error);
     res.status(500).json({ error: 'Failed to cancel registration' });
   }
 });
 
-// Get my registered events
 router.get('/events/registered/my-events', authenticateToken, async (req, res) => {
   try {
-    const events = await db.prepare(`
-      SELECT e.*, er.registered_at, o.name as organizer_name
-      FROM event_registrations er
-      JOIN company_events e ON er.event_id = e.id
-      JOIN users o ON e.organizer_id = o.id
-      WHERE er.user_id = ?
-      ORDER BY e.start_date DESC
-    `).all(req.user.id);
-    res.json(events);
+    const { data: regs, error } = await req.supabase
+      .from('event_registrations')
+      .select('*, event:company_events!event_id(*)')
+      .eq('user_id', req.user.id);
+    if (error) throw error;
+    const list = regs || [];
+    const events = list.map((r) => ({ ...(r.event || {}), registered_at: r.registered_at }));
+    const organizerIds = [...new Set(events.map((e) => e.organizer_id).filter(Boolean))];
+    const { data: organizers } = organizerIds.length ? await req.supabase.from('users').select('id, name').in('id', organizerIds) : { data: [] };
+    const nameById = new Map((organizers || []).map((u) => [u.id, u.name]));
+    const formatted = events.map((e) => ({ ...e, organizer_name: nameById.get(e.organizer_id) ?? null }));
+    formatted.sort((a, b) => (b.start_date || '').localeCompare(a.start_date || ''));
+    res.json(formatted);
   } catch (error) {
     console.error('Error fetching events:', error);
     res.status(500).json({ error: 'Failed to fetch events' });
@@ -377,35 +364,31 @@ router.get('/events/registered/my-events', authenticateToken, async (req, res) =
 });
 
 // ==========================================
-// CELEBRATIONS (BIRTHDAYS & ANNIVERSARIES)
+// CELEBRATIONS
 // ==========================================
 
-// Get upcoming celebrations
 router.get('/celebrations/upcoming', authenticateToken, async (req, res) => {
   try {
     const today = new Date();
     const monthDay = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    const nextWeek = new Date(today);
+    let nextWeek = new Date(today);
     nextWeek.setDate(nextWeek.getDate() + 7);
     const nextWeekMonthDay = `${String(nextWeek.getMonth() + 1).padStart(2, '0')}-${String(nextWeek.getDate()).padStart(2, '0')}`;
-
-    // Get birthdays from employee_profiles
-    const birthdays = await db.prepare(`
-      SELECT u.id, u.name, u.avatar, u.department, ep.date_of_birth,
-             'birthday' as type
-      FROM employee_profiles ep
-      JOIN users u ON ep.user_id = u.id
-      WHERE substr(ep.date_of_birth, 6) BETWEEN ? AND ?
-    `).all(monthDay, nextWeekMonthDay);
-
-    // Get work anniversaries (from user created_at)
-    const anniversaries = await db.prepare(`
-      SELECT u.id, u.name, u.avatar, u.department, u.created_at as work_anniversary,
-             'anniversary' as type
-      FROM users u
-      WHERE substr(u.created_at, 6, 5) BETWEEN ? AND ?
-    `).all(monthDay, nextWeekMonthDay);
-
+    const { data: profiles } = await req.supabase.from('employee_profiles').select('user_id, date_of_birth').not('date_of_birth', 'is', null);
+    const userIds = (profiles || []).map((p) => p.user_id);
+    const { data: users } = userIds.length ? await req.supabase.from('users').select('id, name, avatar, department').in('id', userIds) : { data: [] };
+    const userById = new Map((users || []).map((u) => [u.id, u]));
+    const birthdays = (profiles || [])
+      .filter((p) => p.date_of_birth && p.date_of_birth.length >= 10 && p.date_of_birth.slice(5, 10) >= monthDay && p.date_of_birth.slice(5, 10) <= nextWeekMonthDay)
+      .map((p) => {
+        const u = userById.get(p.user_id);
+        return u ? { ...u, date_of_birth: p.date_of_birth, type: 'birthday' } : null;
+      })
+      .filter(Boolean);
+    const { data: allUsers } = await req.supabase.from('users').select('id, name, avatar, department, created_at');
+    const anniversaries = (allUsers || [])
+      .filter((u) => u.created_at && u.created_at.slice(5, 10) >= monthDay && u.created_at.slice(5, 10) <= nextWeekMonthDay)
+      .map((u) => ({ ...u, work_anniversary: u.created_at, type: 'anniversary' }));
     res.json([...birthdays, ...anniversaries]);
   } catch (error) {
     console.error('Error fetching celebrations:', error);
@@ -413,27 +396,21 @@ router.get('/celebrations/upcoming', authenticateToken, async (req, res) => {
   }
 });
 
-// Get today's celebrations
 router.get('/celebrations/today', authenticateToken, async (req, res) => {
   try {
     const today = new Date();
     const monthDay = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-
-    const birthdays = await db.prepare(`
-      SELECT u.id, u.name, u.avatar, u.department, 'birthday' as type
-      FROM employee_profiles ep
-      JOIN users u ON ep.user_id = u.id
-      WHERE substr(ep.date_of_birth, 6) = ?
-    `).all(monthDay);
-
-    const anniversaries = await db.prepare(`
-      SELECT u.id, u.name, u.avatar, u.department, 'anniversary' as type,
-             CAST((julianday('now') - julianday(u.created_at)) / 365 AS INTEGER) as years
-      FROM users u
-      WHERE substr(u.created_at, 6, 5) = ?
-    `).all(monthDay);
-
-    res.json([...birthdays, ...anniversaries]);
+    const { data: profiles } = await req.supabase.from('employee_profiles').select('user_id').not('date_of_birth', 'is', null);
+    const birthdays = (profiles || [])
+      .filter((p) => p.date_of_birth && p.date_of_birth.length >= 10 && p.date_of_birth.slice(5, 10) === monthDay)
+      .map((p) => p.user_id);
+    const { data: users } = birthdays.length ? await req.supabase.from('users').select('id, name, avatar, department').in('id', birthdays) : { data: [] };
+    const bdayList = (users || []).map((u) => ({ ...u, type: 'birthday' }));
+    const { data: allUsers } = await req.supabase.from('users').select('id, name, avatar, department, created_at');
+    const anniversaries = (allUsers || [])
+      .filter((u) => u.created_at && u.created_at.slice(5, 10) === monthDay)
+      .map((u) => ({ ...u, type: 'anniversary', years: Math.floor((today - new Date(u.created_at)) / (365.25 * 24 * 60 * 60 * 1000)) }));
+    res.json([...bdayList, ...anniversaries]);
   } catch (error) {
     console.error('Error fetching celebrations:', error);
     res.status(500).json({ error: 'Failed to fetch celebrations' });
@@ -444,41 +421,35 @@ router.get('/celebrations/today', authenticateToken, async (req, res) => {
 // NOTIFICATIONS
 // ==========================================
 
-// Get my notifications
 router.get('/notifications/my-notifications', authenticateToken, async (req, res) => {
   try {
     const { unread_only } = req.query;
-    let query = `
-      SELECT * FROM notifications WHERE user_id = ?
-    `;
-    if (unread_only === 'true') {
-      query += ' AND is_read = 0';
-    }
-    query += ' ORDER BY created_at DESC LIMIT 50';
-
-    const notifications = await db.prepare(query).all(req.user.id);
-    res.json(notifications);
+    let q = req.supabase.from('notifications').select('*').eq('user_id', req.user.id).order('created_at', { ascending: false }).limit(50);
+    if (unread_only === 'true') q = q.eq('is_read', 0);
+    const { data: notifications, error } = await q;
+    if (error) throw error;
+    res.json(notifications || []);
   } catch (error) {
     console.error('Error fetching notifications:', error);
     res.status(500).json({ error: 'Failed to fetch notifications' });
   }
 });
 
-// Get unread count
 router.get('/notifications/unread-count', authenticateToken, async (req, res) => {
   try {
-    const count = await db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0').get(req.user.id);
-    res.json({ count: count.count });
+    const { count, error } = await req.supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', req.user.id).eq('is_read', 0);
+    if (error) throw error;
+    res.json({ count: count ?? 0 });
   } catch (error) {
     console.error('Error fetching count:', error);
     res.status(500).json({ error: 'Failed to fetch count' });
   }
 });
 
-// Mark notification as read
 router.post('/notifications/:id/read', authenticateToken, async (req, res) => {
   try {
-    await db.prepare('UPDATE notifications SET is_read = 1, read_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+    const { error } = await req.supabase.from('notifications').update({ is_read: 1, read_at: new Date().toISOString() }).eq('id', req.params.id).eq('user_id', req.user.id);
+    if (error) throw error;
     res.json({ message: 'Marked as read' });
   } catch (error) {
     console.error('Error marking read:', error);
@@ -486,10 +457,10 @@ router.post('/notifications/:id/read', authenticateToken, async (req, res) => {
   }
 });
 
-// Mark all as read
 router.post('/notifications/mark-all-read', authenticateToken, async (req, res) => {
   try {
-    await db.prepare('UPDATE notifications SET is_read = 1, read_at = CURRENT_TIMESTAMP WHERE user_id = ? AND is_read = 0').run(req.user.id);
+    const { error } = await req.supabase.from('notifications').update({ is_read: 1, read_at: new Date().toISOString() }).eq('user_id', req.user.id).eq('is_read', 0);
+    if (error) throw error;
     res.json({ message: 'All marked as read' });
   } catch (error) {
     console.error('Error marking all read:', error);
@@ -497,17 +468,14 @@ router.post('/notifications/mark-all-read', authenticateToken, async (req, res) 
   }
 });
 
-// Create notification (internal use)
 router.post('/notifications', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { user_id, title, message, type, action_url } = req.body;
-
     const id = `notif-${uuidv4()}`;
-    await db.prepare(`
-      INSERT INTO notifications (id, user_id, title, message, type, action_url)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, user_id, title, message, type || 'info', action_url);
-
+    const { error } = await req.supabase.from('notifications').insert({
+      id, user_id, title, message, type: type || 'info', action_url,
+    });
+    if (error) throw error;
     res.status(201).json({ message: 'Notification created' });
   } catch (error) {
     console.error('Error creating notification:', error);
@@ -522,44 +490,43 @@ router.post('/notifications', authenticateToken, isAdmin, async (req, res) => {
 router.get('/dashboard', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    const isAdmin = req.user.role === 'admin';
-
+    const isAdminUser = req.user.role === 'admin';
+    const now = new Date().toISOString();
+    const today = new Date().toISOString().slice(0, 10);
+    const [publishedAnn, readByUser, eventRegs, unreadNotif, totalAnn, upcomingEvts, profilesToday, recentAnn] = await Promise.all([
+      req.supabase.from('announcements').select('id').eq('status', 'published').or(`publish_at.is.null,publish_at.lte.${now}`).or(`expires_at.is.null,expires_at.gt.${now}`),
+      req.supabase.from('announcement_reads').select('announcement_id').eq('user_id', userId),
+      req.supabase.from('event_registrations').select('event_id').eq('user_id', userId),
+      req.supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('is_read', 0),
+      isAdminUser ? req.supabase.from('announcements').select('*', { count: 'exact', head: true }).eq('status', 'published') : Promise.resolve({ count: 0 }),
+      isAdminUser ? req.supabase.from('company_events').select('*', { count: 'exact', head: true }).gte('start_date', today).eq('status', 'scheduled') : Promise.resolve({ count: 0 }),
+      isAdminUser ? req.supabase.from('employee_profiles').select('id').not('date_of_birth', 'is', null) : Promise.resolve({ data: [] }),
+      isAdminUser ? req.supabase.from('announcements').select('id, title, type, priority, created_at').eq('status', 'published').order('created_at', { ascending: false }).limit(5) : Promise.resolve({ data: [] }),
+    ]);
+    const readIds = new Set((readByUser.data || []).map((r) => r.announcement_id));
+    const unreadAnn = (publishedAnn.data || []).filter((a) => !readIds.has(a.id)).length;
+    const eventIds = (eventRegs.data || []).map((r) => r.event_id);
+    const { count: upcomingCount } = eventIds.length ? await req.supabase.from('company_events').select('*', { count: 'exact', head: true }).in('id', eventIds).gte('start_date', today).eq('status', 'scheduled') : { count: 0 };
     const myStats = {
-      unreadAnnouncements: (await db.prepare(`
-        SELECT COUNT(*) as count FROM announcements a
-        WHERE a.status = 'published'
-          AND (a.publish_at IS NULL OR a.publish_at <= datetime('now'))
-          AND (a.expires_at IS NULL OR a.expires_at > datetime('now'))
-          AND NOT EXISTS (SELECT 1 FROM announcement_reads ar WHERE ar.announcement_id = a.id AND ar.user_id = ?)
-      `).get(userId)).count,
-      upcomingEvents: (await db.prepare(`
-        SELECT COUNT(*) as count FROM event_registrations er
-        JOIN company_events e ON er.event_id = e.id
-        WHERE er.user_id = ? AND e.start_date >= date('now') AND e.status = 'scheduled'
-      `).get(userId)).count,
-      unreadNotifications: (await db.prepare('SELECT COUNT(*) as count FROM notifications WHERE user_id = ? AND is_read = 0').get(userId)).count
+      unreadAnnouncements: unreadAnn,
+      upcomingEvents: upcomingCount ?? 0,
+      unreadNotifications: unreadNotif.count ?? 0,
     };
-
     let orgStats = null;
-    if (isAdmin) {
+    if (isAdminUser) {
+      const monthDay = `${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`;
+      const { data: profiles } = await req.supabase.from('employee_profiles').select('id, date_of_birth').not('date_of_birth', 'is', null);
+      const todaysBday = (profiles || []).filter((p) => p.date_of_birth && String(p.date_of_birth).length >= 10 && String(p.date_of_birth).slice(5, 10) === monthDay).length;
+      const recentIds = (recentAnn.data || []).map((a) => a.id);
+      const { data: readCounts } = recentIds.length ? await req.supabase.from('announcement_reads').select('announcement_id').in('announcement_id', recentIds) : { data: [] };
+      const countByAnn = (readCounts || []).reduce((acc, r) => { acc[r.announcement_id] = (acc[r.announcement_id] || 0) + 1; return acc; }, {});
       orgStats = {
-        totalAnnouncements: (await db.prepare('SELECT COUNT(*) as count FROM announcements WHERE status = ?').get('published')).count,
-        upcomingEvents: (await db.prepare('SELECT COUNT(*) as count FROM company_events WHERE start_date >= date("now") AND status = ?').get('scheduled')).count,
-        todaysCelebrations: (await db.prepare(`
-          SELECT COUNT(*) as count FROM employee_profiles ep
-          WHERE substr(ep.date_of_birth, 6) = strftime('%m-%d', 'now')
-        `).get()).count,
-        recentAnnouncements: await db.prepare(`
-          SELECT a.id, a.title, a.type, a.priority, a.created_at,
-                 (SELECT COUNT(*) FROM announcement_reads WHERE announcement_id = a.id) as reads_count
-          FROM announcements a
-          WHERE a.status = 'published'
-          ORDER BY a.created_at DESC
-          LIMIT 5
-        `).all()
+        totalAnnouncements: totalAnn.count ?? 0,
+        upcomingEvents: upcomingEvts.count ?? 0,
+        todaysCelebrations: todaysBday,
+        recentAnnouncements: (recentAnn.data || []).map((a) => ({ ...a, reads_count: countByAnn[a.id] || 0 })),
       };
     }
-
     res.json({ myStats, orgStats });
   } catch (error) {
     console.error('Error fetching dashboard:', error);

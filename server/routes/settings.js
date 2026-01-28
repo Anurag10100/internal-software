@@ -1,17 +1,24 @@
 const express = require('express');
-const { createClient } = require('@supabase/supabase-js');
+const { getSupabaseClient } = require('../config/supabase');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+function parseSettingsJson(val) {
+  if (val == null) return {};
+  if (typeof val === 'object') return val;
+  try {
+    return typeof val === 'string' ? JSON.parse(val) : {};
+  } catch {
+    return {};
+  }
+}
 
 // Get HRMS settings
 router.get('/', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { data: settings } = await supabase
       .from('hrms_settings')
       .select()
@@ -31,7 +38,7 @@ router.get('/', authenticateToken, async (req, res) => {
       });
     }
 
-    const settingsJson = settings.settings_json ? JSON.parse(settings.settings_json) : {};
+    const settingsJson = parseSettingsJson(settings.settings_json);
 
     res.json({
       settings: {
@@ -49,6 +56,8 @@ router.get('/', authenticateToken, async (req, res) => {
 // Update HRMS settings (admin only)
 router.put('/', authenticateToken, requireAdmin, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { lateTime, halfDayTime, locationOptions, leaveTypes, weeklyOffSettings, holidays } = req.body;
 
     const { data: existingSettings } = await supabase
@@ -57,7 +66,7 @@ router.put('/', authenticateToken, requireAdmin, async (req, res) => {
       .eq('id', 1)
       .single();
 
-    const existingJson = existingSettings?.settings_json ? JSON.parse(existingSettings.settings_json) : {};
+    const existingJson = parseSettingsJson(existingSettings?.settings_json);
 
     const newSettingsJson = JSON.stringify({
       locationOptions: locationOptions ?? existingJson.locationOptions ?? [],
@@ -96,7 +105,7 @@ router.put('/', authenticateToken, requireAdmin, async (req, res) => {
       .eq('id', 1)
       .single();
 
-    const updatedJson = JSON.parse(updatedSettings.settings_json);
+    const updatedJson = parseSettingsJson(updatedSettings.settings_json);
 
     res.json({
       message: 'Settings updated successfully',

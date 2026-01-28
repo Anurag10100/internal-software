@@ -1,17 +1,14 @@
 const express = require('express');
-const { createClient } = require('@supabase/supabase-js');
+const { getSupabaseClient } = require('../config/supabase');
 const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
 // Get all tasks (with user info)
 router.get('/', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { data: tasks, error } = await supabase
       .from('tasks')
       .select('*, assignedBy:users!assigned_by_user_id(name), assignedTo:users!assigned_to_user_id(name)')
@@ -45,6 +42,8 @@ router.get('/', authenticateToken, async (req, res) => {
 // Get my tasks (assigned to me)
 router.get('/my-tasks', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { data: tasks, error } = await supabase
       .from('tasks')
       .select('*, assignedBy:users!assigned_by_user_id(name)')
@@ -78,6 +77,8 @@ router.get('/my-tasks', authenticateToken, async (req, res) => {
 // Get delegated tasks (assigned by me)
 router.get('/delegated', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { data: tasks, error } = await supabase
       .from('tasks')
       .select('*, assignedTo:users!assigned_to_user_id(name)')
@@ -112,6 +113,8 @@ router.get('/delegated', authenticateToken, async (req, res) => {
 // Create task
 router.post('/', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { title, description, assignedTo, dueDate, dueTime, priority, tags } = req.body;
 
     if (!title || !assignedTo || !dueDate || !dueTime) {
@@ -156,6 +159,8 @@ router.post('/', authenticateToken, async (req, res) => {
 // Update task
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { id } = req.params;
     const { title, description, status, priority, dueDate, dueTime, tags } = req.body;
 
@@ -205,6 +210,8 @@ router.put('/:id', authenticateToken, async (req, res) => {
 // Delete task
 router.delete('/:id', authenticateToken, async (req, res) => {
   try {
+    const supabase = getSupabaseClient();
+    if (!supabase) return res.status(503).json({ error: 'Database not configured' });
     const { id } = req.params;
 
     const { data: existingTask, error: findError } = await supabase
